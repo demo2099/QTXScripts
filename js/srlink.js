@@ -2,16 +2,9 @@
 author:demo
 群组https://t.me/demo2099
  */
-var body=$response.body;body={
- "errorCode": null,
- "errorMsg": null,
- "data": {
-  "id": 1870196,
-  "vipEndTime": "2021-03-06 03:33:02",
-  "product": null,
-  "userType": "vip",
-  "username": "e43da6ab0bbdf3196b3767567ca41e2841fd8705",
-  "gateways": [
+ 
+ let url = $request.url;
+ var  gateways=[
    {
     "ip": "61.216.17.43",
     "location": "tw",
@@ -48,13 +41,11 @@ var body=$response.body;body={
     "psk": "Kom8PW1",
     "locationName": "Singapore"
    }
-  ],
-  "token": "ead64d8fc9d01a621ed9350833c58a32",
-  "expired": false
- },
- "responseTime": "2020-03-04 03:41:26",
- "requestData": {
-  "requestURI": "api/user/e43da6ab0bbdf3196b3767567ca41e2841fd8705"
- },
- "success": true
-};body=JSON.stringify(body);$done({body});
+  ];
+var body=$response.body;
+var obj = JSON.parse(body);
+obj.data.vipEndTime="2021-03-06 03:33:02";
+obj.data.userType="vip";
+obj.data.gateways=gateways;
+obj.data.expired=false;
+body=JSON.stringify(obj);$done({body});
