@@ -8,7 +8,7 @@ QuantumultX
 
 2⃣️用working copy挂载我的库: https://github.com/demo2099/QTXScripts.git 
 
-3⃣️本地重新  https://raw.githubusercontent.com/demo2099/QTXScripts/master/Js_local.conf
+3⃣️本地重写添加  https://raw.githubusercontent.com/demo2099/QTXScripts/master/Js_local.conf
 
 远程订阅脚本:
 Js_remote.conf
