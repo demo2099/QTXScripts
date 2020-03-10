@@ -14,3 +14,5 @@ QuantumultX
 Js_remote.conf
 
 https://raw.githubusercontent.com/demo2099/QTXScripts/master/Js_remote.conf
+
+TG群:https://t.me/demo2099
