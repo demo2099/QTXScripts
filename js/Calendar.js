@@ -1,7 +1,3 @@
-
-
-
-
 /*
 author:demo
 群组https://t.me/demo2099
@@ -59,154 +55,72 @@ $notify( "❤️一言❤️","",
        console.log(`提交记录获取报错`)
     });
  
+const $ = API("APP"); // Env("APP", false) --> 无log输出
+// 测试console
+$.log("测试输出");
+$.error("这是一条错误信息");
 
-/*
-    本作品用于QuantumultX和Surge之间js执行方法的转换
-    您只需书写其中任一软件的js,然后在您的js最【前面】追加上此段js即可
-    无需担心影响执行问题,具体原理是将QX和Surge的方法转换为互相可调用的方法
-    尚未测试是否支持import的方式进行使用,因此暂未export
-    如有问题或您有更好的改进方案,请前往 https://github.com/sazs34/TaskConfig/issues 提交内容,或直接进行pull request
-    您也可直接在tg中联系@wechatu
-*/
-// #region 固定头部
-let isQuantumultX = $task != undefined; //判断当前运行环境是否是qx
-let isSurge = $httpClient != undefined; //判断当前运行环境是否是surge
-// 判断request还是respons
-// down方法重写
-var $done = (obj={}) => {
-    var isRequest = typeof $request != "undefined";
-    if (isQuantumultX) {
-        return isRequest ? $done({}) : ""
-    }
-    if (isSurge) {
-        return isRequest ? $done({}) : $done()
-    }
-}
-// http请求
-var $task = isQuantumultX ? $task : {};
-var $httpClient = isSurge ? $httpClient : {};
-// cookie读写
-var $prefs = isQuantumultX ? $prefs : {};
-var $persistentStore = isSurge ? $persistentStore : {};
-// 消息通知
-var $notify = isQuantumultX ? $notify : {};
-var $notification = isSurge ? $notification : {};
-// #endregion 固定头部
+// 测试通知
+$.notify("跳转测试", "Subtitle", "点击跳转", "http://www.bing.com");
+$.notify("图片测试（QX有效）", "Subtitle", "", {
+  "media-url":
+    "https://avatars2.githubusercontent.com/u/21050064?s=460&u=40a74913dd0a3d00670d05148c3a08c787470021&v=4",
+});
 
-// #region 网络请求专用转换
-if (isQuantumultX) {
-    var errorInfo = {
-        error: ''
-    };
-    $httpClient = {
-        get: (url, cb) => {
-            var urlObj;
-            if (typeof (url) == 'string') {
-                urlObj = {
-                    url: url
-                }
-            } else {
-                urlObj = url;
-            }
-            $task.fetch(urlObj).then(response => {
-                cb(undefined, response, response.body)
-            }, reason => {
-                errorInfo.error = reason.error;
-                cb(errorInfo, response, '')
-            })
-        },
-        post: (url, cb) => {
-            var urlObj;
-            if (typeof (url) == 'string') {
-                urlObj = {
-                    url: url
-                }
-            } else {
-                urlObj = url;
-            }
-            url.method = 'POST';
-            $task.fetch(urlObj).then(response => {
-                cb(undefined, response, response.body)
-            }, reason => {
-                errorInfo.error = reason.error;
-                cb(errorInfo, response, '')
-            })
-        }
-    }
+// 测试缓存
+const key = "测试";
+const data = "数据";
+$.write(data, key);
+$.log(`当前缓存：\n${JSON.stringify($.cache)}`);
+if ($.read(key) !== data) {
+  $.notify("缓存测试炸了！", "", "");
 }
-if (isSurge) {
-    $task = {
-        fetch: url => {
-            //为了兼容qx中fetch的写法,所以永不reject
-            return new Promise((resolve, reject) => {
-                if (url.method == 'POST') {
-                    $httpClient.post(url, (error, response, data) => {
-                        if (response) {
-                            response.body = data;
-                            resolve(response, {
-                                error: error
-                            });
-                        } else {
-                            resolve(null, {
-                                error: error
-                            })
-                        }
-                    })
-                } else {
-                    $httpClient.get(url, (error, response, data) => {
-                        if (response) {
-                            response.body = data;
-                            resolve(response, {
-                                error: error
-                            });
-                        } else {
-                            resolve(null, {
-                                error: error
-                            })
-                        }
-                    })
-                }
-            })
+$.delete(key);
+if ($.read(key) !== undefined) {
+  $.notify("缓存Key未删除！", "", "");
+}
+$.done();
 
-        }
+// 测试请求
+$.get("https://postman-echo.com/get?foo1=bar1&foo2=bar2")
+  .then((resp) => JSON.parse(resp.body))
+  .delay(1000) // wait for 1 second
+  .then((data) => {
+    if (data.args.foo1 !== "bar1") {
+      throw new Error("Wrong Parameter!");
+    } else {
+      $.log("GET 测试通过！");
     }
-}
-// #endregion 网络请求专用转换
+  })
+  .catch((err) => $.notify("GET 请求测试失败！", "", err));
 
-// #region cookie操作
-if (isQuantumultX) {
-    $persistentStore = {
-        read: key => {
-            return $prefs.valueForKey(key);
-        },
-        write: (val, key) => {
-            return $prefs.setValueForKey(val, key);
-        }
-    }
-}
-if (isSurge) {
-    $prefs = {
-        valueForKey: key => {
-            return $persistentStore.read(key);
-        },
-        setValueForKey: (val, key) => {
-            return $persistentStore.write(val, key);
-        }
-    }
-}
-// #endregion
+const sample = {
+  data: "ECHO"
+};
 
-// #region 消息通知
-if (isQuantumultX) {
-    $notification = {
-        post: (title, subTitle, detail) => {
-            $notify(title, subTitle, detail);
-        }
+$.post({
+  url: "http://scooterlabs.com/echo",
+  body: JSON.stringify(sample),
+})
+  .then((resp) => {
+    if (resp.body.indexOf('POST') === -1) {
+      $.notify("POST 测试失败", "返回体", resp.body);
+    } else {
+      $.log("POST 测试通过！");
     }
-}
-if (isSurge) {
-    $notify = function (title, subTitle, detail) {
-        $notification.post(title, subTitle, detail);
-    }
-}
+  })
+  .catch((err) => $.notify("POST 请求测试失败！", "", err));
 
+// 时间转换测试
+const time = $.formatTime(1592221383);
+$.log(time);
+
+// delay
+$.wait(1000).then(() => $.log("等待1s"));
+
+$.done();
+
+// prettier-ignore
+/*********************************** API *************************************/
+function API(t="untitled",i=!1){return new class{constructor(t,i){this.name=t,this.debug=i,this.isQX="undefined"!=typeof $task,this.isLoon="undefined"!=typeof $loon,this.isSurge="undefined"!=typeof $httpClient&&!this.isLoon,this.isNode="function"==typeof require,this.node=(()=>this.isNode?{request:require("request"),fs:require("fs")}:null)(),this.cache=this.initCache(),this.log(`INITIAL CACHE:\n${JSON.stringify(this.cache)}`),Promise.prototype.delay=function(t){return this.then(function(i){return((t,i)=>new Promise(function(e){setTimeout(e.bind(null,i),t)}))(t,i)})}}get(t){return this.isQX?("string"==typeof t&&(t={url:t,method:"GET"}),$task.fetch(t)):this.isLoon||this.isSurge?$httpClient.get(t):this.isNode?new Promise((i,e)=>{this.node.request(t,(t,s)=>{t?e(t):i(s)})}):void 0}post(t){return this.isQX?$task.fetch(t):this.isLoon||this.isSurge?$httpClient.post(t):this.isNode?new Promise((i,e)=>{this.node.request.post(t,(t,s)=>{t?e(t):i(s)})}):void 0}initCache(){if(this.isQX)return $prefs.valueForKey(this.name)||{};if(this.isLoon||this.isSurge)return $persistanceStore.read(this.name)||{};if(this.isNode){const t=`${this.name}.json`;return this.node.fs.existsSync(t)?JSON.parse(this.node.fs.readFileSync(`${this.name}.json`)):(this.node.fs.writeFileSync(t,JSON.stringify({}),{flag:"wx"},t=>console.log(t)),{})}}persistCache(){const t=this.cache;this.isQX&&$prefs.setValueForKey(t,this.name),this.isSurge&&$persistanceStore.write(t,this.name),this.isNode&&this.node.fs.writeFileSync(`${this.name}.json`,JSON.stringify(t),{flag:"w"},t=>console.log(t))}write(t,i){this.log(`SET ${i} = ${t}`),this.cache={...this.cache,[i]:t}}read(t){return this.log(`READ ${t}`),this.cache[t]}delete(t){this.log(`DELETE ${t}`),this.write(void 0,t)}notify(t,i,e,s){const o="string"==typeof s?s:void 0,n=e+(null==o?"":`\n${o}`);this.isQX&&(void 0!==o?$notify(t,i,e,{"open-url":o}):$notify(t,i,e,s)),this.isSurge&&$notification.post(t,i,n),this.isLoon&&$notification.post(t,i,e,o),this.isNode&&console.log(`${t}\n${i}\n${n}`)}log(t){(this.debug=!0)&&console.log(t)}info(t){console.log(t)}error(t){this.log("ERROR: "+t)}wait(t){return new Promise(i=>setTimeout(i,t))}done(t={}){this.persistCache(),this.isQX&&$done(t),(this.isLoon||this.isSurge)&&$done(t)}formatTime(t){const i=new Date(t);return`${i.getFullYear()}年${i.getMonth()+1}月${i.getDate()}日${i.getHours()}时`}}(t,i)}
+/*****************************************************************************/
