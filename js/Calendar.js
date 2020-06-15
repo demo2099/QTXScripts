@@ -61,11 +61,8 @@ $.log("测试输出");
 $.error("这是一条错误信息");
 
 // 测试通知
-$.notify("跳转测试", "Subtitle", "点击跳转", "http://www.bing.com");
-$.notify("图片测试（QX有效）", "Subtitle", "", {
-  "media-url":
-    "https://avatars2.githubusercontent.com/u/21050064?s=460&u=40a74913dd0a3d00670d05148c3a08c787470021&v=4",
-});
+//$.notify("跳转测试", "Subtitle", "点击跳转", "http://www.bing.com");
+
 
 // 测试缓存
 const key = "测试";
@@ -73,11 +70,11 @@ const data = "数据";
 $.write(data, key);
 $.log(`当前缓存：\n${JSON.stringify($.cache)}`);
 if ($.read(key) !== data) {
-  $.notify("缓存测试炸了！", "", "");
+  //$.notify("缓存测试炸了！", "", "");
 }
 $.delete(key);
 if ($.read(key) !== undefined) {
-  $.notify("缓存Key未删除！", "", "");
+ // $.notify("缓存Key未删除！", "", "");
 }
 $.done();
 
@@ -104,7 +101,7 @@ $.post({
 })
   .then((resp) => {
     if (resp.body.indexOf('POST') === -1) {
-      $.notify("POST 测试失败", "返回体", resp.body);
+     // $.notify("POST 测试失败", "返回体", resp.body);
     } else {
       $.log("POST 测试通过！");
     }
