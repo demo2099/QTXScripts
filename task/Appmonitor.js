@@ -1,17 +1,25 @@
-let isQuantumultX = $task != undefined; 
-let isSurge = $httpClient != undefined; 
-// http
+/*
+    本作品用于QuantumultX和Surge之间js执行方法的转换
+    您只需书写其中任一软件的js,然后在您的js最【前面】追加上此段js即可
+    无需担心影响执行问题,具体原理是将QX和Surge的方法转换为互相可调用的方法
+    尚未测试是否支持import的方式进行使用,因此暂未export
+    如有问题或您有更好的改进方案,请前往 https://github.com/sazs34/TaskConfig/issues 提交内容,或直接进行pull request
+*/
+// #region 固定头部
+let isQuantumultX = $task != undefined; //判断当前运行环境是否是qx
+let isSurge = $httpClient != undefined; //判断当前运行环境是否是surge
+// http请求
 var $task = isQuantumultX ? $task : {};
 var $httpClient = isSurge ? $httpClient : {};
 // cookie读写
 var $prefs = isQuantumultX ? $prefs : {};
 var $persistentStore = isSurge ? $persistentStore : {};
-// 
+// 消息通知
 var $notify = isQuantumultX ? $notify : {};
 var $notification = isSurge ? $notification : {};
-// #endregion
+// #endregion 固定头部
 
-// #region 
+// #region 网络请求专用转换
 if (isQuantumultX) {
     var errorInfo = {
         error: ''
@@ -55,6 +63,7 @@ if (isQuantumultX) {
 if (isSurge) {
     $task = {
         fetch: url => {
+            //为了兼容qx中fetch的写法,所以永不reject
             return new Promise((resolve, reject) => {
                 if (url.method == 'POST') {
                     $httpClient.post(url, (error, response, data) => {
@@ -88,9 +97,9 @@ if (isSurge) {
         }
     }
 }
-// #endregion
+// #endregion 网络请求专用转换
 
-// #region cookie
+// #region cookie操作
 if (isQuantumultX) {
     $persistentStore = {
         read: key => {
@@ -113,7 +122,7 @@ if (isSurge) {
 }
 // #endregion
 
-// #region 
+// #region 消息通知
 if (isQuantumultX) {
     $notification = {
         post: (title, subTitle, detail) => {
@@ -128,14 +137,15 @@ if (isSurge) {
 }
 // #endregion
 
-/*
+/*app版本及价格监控(来自t.me/QuanXApp群友分享)
 //30 7-22/1 * * * AppMonitor.js
-apps=["1443988620:hk","1443988620/us","1443988620-uk","1443988620_jp","1443988620 au"]
-/:|_-
+app可单独设置区域，未单独设置区域，则采用reg默认区域
+设置区域方式apps=["1443988620:hk","1443988620/us","1443988620-uk","1443988620_jp","1443988620 au"]
+以上方式均可 分隔符支持 空格/:|_-
 */
-console.log("AppMonitor");
-let apps=["1135811739","1466411180","730712409","1423330822","1441195209","364901807","1210079064","1457369322","1410006908","1504491325","1483387513","738897668","1047223162","1463342498","1459055246","438596432","1442620678","1497324992","453170202","355460798","1116905928","1373567447","1312014438","990591885","1141312799","1073473333","432850144","896694807","1434207799","924695435","680469088","869346854","935754064","1035331258","904237743","946930094","1373567447","916366645","1382419586","1299735217","1460078746","333710667","1049254261","1489780246","1407367202","436577167","1481018071","1315744137","1436650069","980368562","1007355333","1126386264","492648096","950519698","317107309","539397400","1444671526","1416894836","1117998129","1462386180","558818638","691121579","1474856599","436577167","641613694","1312014438","1416894836","1117998129","1462386180","558818638","691121579","1474856599","436577167","641613694","1312014438","1443988620"];//appid
-let reg="vn";//:us cn hk
+console.log("APP监控运行");
+let apps=["1443988620|hk","1312014438 cn","499470113/vn","1314212521-jp","1282297037_au","932747118:ie","1116905928","1373567447"];//app跟踪id
+let reg="us";//默认区域：美国us 中国cn 香港hk
 let notifys=[];
 format_apps(apps);
 function format_apps(x) {
@@ -166,11 +176,11 @@ function format_apps(x) {
                 }
             }
             else{
-                notifys.push(`ID error:【${n}】`)
+                notifys.push(`ID格式错误:【${n}】`)
             }
         }
         else{
-            notifys.push(`ID error:【${n}】`)
+            notifys.push(`ID格式错误:【${n}】`)
         }
     });
     if(Object.keys(apps_f).length>0){
@@ -204,15 +214,15 @@ async function post_data(d) {
                         if(app_monitor.hasOwnProperty(x.trackId)){
                             if(JSON.stringify(app_monitor[x.trackId])!==JSON.stringify(infos[x.trackId])){
                                 if(x.version!==app_monitor[x.trackId].v){
-                                    notifys.push(`${flag(k)}🧩${x.trackName}:version【${x.version}】`)
+                                    notifys.push(`${flag(k)}🧩${x.trackName}:升级【${x.version}】`)
                                 }
                                 if(x.formattedPrice!==app_monitor[x.trackId].p){
-                                    notifys.push(`${flag(k)}💰${x.trackName}:price【${x.formattedPrice}】`)
+                                    notifys.push(`${flag(k)}💰${x.trackName}:价格【${x.formattedPrice}】`)
                                 }
                             }}
                         else{
-                            notifys.push(`${flag(k)}🧩${x.trackName}:version【${x.version}】`);
-                            notifys.push(`${flag(k)}💰${x.trackName}:price【${x.formattedPrice}】`)
+                            notifys.push(`${flag(k)}🧩${x.trackName}:版本【${x.version}】`);
+                            notifys.push(`${flag(k)}💰${x.trackName}:价格【${x.formattedPrice}】`)
                         }
                     }));
                 }
@@ -227,7 +237,7 @@ async function post_data(d) {
             notify(notifys)
         }
         else{
-            console.log("AppMonitor: No changed")
+            console.log("APP监控：版本及价格无变化")
         }
     }catch (e) {
         console.log(e);
@@ -236,7 +246,7 @@ async function post_data(d) {
 function notify(notifys){
     notifys=notifys.join("\n");
     console.log(notifys);
-    $notify("AppMonitor","",notifys)
+    $notify("APP监控","",notifys)
 }
 function flag(x){
   var flags = new Map([[ "AC" , "🇦🇨" ] , [ "AF" , "🇦🇫" ] , [ "AI" , "🇦🇮" ] , [ "AL" , "🇦🇱" ] , [ "AM" , "🇦🇲" ] , [ "AQ" , "🇦🇶" ] , [ "AR" , "🇦🇷" ] , [ "AS" , "🇦🇸" ] , [ "AT" , "🇦🇹" ] , [ "AU" , "🇦🇺" ] , [ "AW" , "🇦🇼" ] , [ "AX" , "🇦🇽" ] , [ "AZ" , "🇦🇿" ] , [ "BB" , "🇧🇧" ] , [ "BD" , "🇧🇩" ] , [ "BE" , "🇧🇪" ] , [ "BF" , "🇧🇫" ] , [ "BG" , "🇧🇬" ] , [ "BH" , "🇧🇭" ] , [ "BI" , "🇧🇮" ] , [ "BJ" , "🇧🇯" ] , [ "BM" , "🇧🇲" ] , [ "BN" , "🇧🇳" ] , [ "BO" , "🇧🇴" ] , [ "BR" , "🇧🇷" ] , [ "BS" , "🇧🇸" ] , [ "BT" , "🇧🇹" ] , [ "BV" , "🇧🇻" ] , [ "BW" , "🇧🇼" ] , [ "BY" , "🇧🇾" ] , [ "BZ" , "🇧🇿" ] , [ "CA" , "🇨🇦" ] , [ "CF" , "🇨🇫" ] , [ "CH" , "🇨🇭" ] , [ "CK" , "🇨🇰" ] , [ "CL" , "🇨🇱" ] , [ "CM" , "🇨🇲" ] , [ "CN" , "🇨🇳" ] , [ "CO" , "🇨🇴" ] , [ "CP" , "🇨🇵" ] , [ "CR" , "🇨🇷" ] , [ "CU" , "🇨🇺" ] , [ "CV" , "🇨🇻" ] , [ "CW" , "🇨🇼" ] , [ "CX" , "🇨🇽" ] , [ "CY" , "🇨🇾" ] , [ "CZ" , "🇨🇿" ] , [ "DE" , "🇩🇪" ] , [ "DG" , "🇩🇬" ] , [ "DJ" , "🇩🇯" ] , [ "DK" , "🇩🇰" ] , [ "DM" , "🇩🇲" ] , [ "DO" , "🇩🇴" ] , [ "DZ" , "🇩🇿" ] , [ "EA" , "🇪🇦" ] , [ "EC" , "🇪🇨" ] , [ "EE" , "🇪🇪" ] , [ "EG" , "🇪🇬" ] , [ "EH" , "🇪🇭" ] , [ "ER" , "🇪🇷" ] , [ "ES" , "🇪🇸" ] , [ "ET" , "🇪🇹" ] , [ "EU" , "🇪🇺" ] , [ "FI" , "🇫🇮" ] , [ "FJ" , "🇫🇯" ] , [ "FK" , "🇫🇰" ] , [ "FM" , "🇫🇲" ] , [ "FO" , "🇫🇴" ] , [ "FR" , "🇫🇷" ] , [ "GA" , "🇬🇦" ] , [ "GB" , "🇬🇧" ] , [ "HK" , "🇭🇰" ] , [ "ID" , "🇮🇩" ] , [ "IE" , "🇮🇪" ] , [ "IL" , "🇮🇱" ] , [ "IM" , "🇮🇲" ] , [ "IN" , "🇮🇳" ] , [ "IS" , "🇮🇸" ] , [ "IT" , "🇮🇹" ] , [ "JP" , "🇯🇵" ] , [ "KR" , "🇰🇷" ] , [ "MO" , "🇲🇴" ] , [ "MX" , "🇲🇽" ] , [ "MY" , "🇲🇾" ] , [ "NL" , "🇳🇱" ] , [ "PH" , "🇵🇭" ] , [ "RO" , "🇷🇴" ] , [ "RS" , "🇷🇸" ] , [ "RU" , "🇷🇺" ] , [ "RW" , "🇷🇼" ] , [ "SA" , "🇸🇦" ] , [ "SB" , "🇸🇧" ] , [ "SC" , "🇸🇨" ] , [ "SD" , "🇸🇩" ] , [ "SE" , "🇸🇪" ] , [ "SG" , "🇸🇬" ] , [ "TH" , "🇹🇭" ] , [ "TN" , "🇹🇳" ] , [ "TO" , "🇹🇴" ] , [ "TR" , "🇹🇷" ] , [ "TV" , "🇹🇻" ] , [ "TW" , "🇨🇳" ] , [ "UK" , "🇬🇧" ] , [ "UM" , "🇺🇲" ] , [ "US" , "🇺🇸" ] , [ "UY" , "🇺🇾" ] , [ "UZ" , "🇺🇿" ] , [ "VA" , "🇻🇦" ] , [ "VE" , "🇻🇪" ] , [ "VG" , "🇻🇬" ] , [ "VI" , "🇻🇮" ] , [ "VN" , "🇻🇳" ]])
