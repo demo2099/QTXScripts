@@ -114,7 +114,16 @@ function location(){
                 $notify("获取位置", "出错啦", response+darkObj.error);
             }
 			config.lat_lon = darkObj.lat+","+darkObj.lon;
-
+    provider.heweather_now.api=`https://free-api.heweather.net/s6/weather/now?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`;
+		
+		 provider.heweather_daily.api=`https://free-api.heweather.net/s6/weather/forecast?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`;
+		
+		provider.heweather_air.api=`https://free-api.heweather.net/s6/air/now?location=auto_ip&key=${config.huweather_apiKey}`;
+		
+		provider.heweather_lifestyle.api=`https://free-api.heweather.net/s6/weather/lifestyle?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`;
+		
+		 provider.darksky.api=`https://api.darksky.net/forecast/${config.darksky_api}/${config.lat_lon.replace(/\s/g, "").replace("，", ",")}?lang=${config.lang}&units=si`;
+		provider.aqicn.api=`https://api.waqi.info/feed/geo:${config.lat_lon.replace(/\s/g, "").replace("，", ",").replace(/,/, ";")}/?token=${config.aqicn_api}`;
 } catch (e) {
             console.log(`地理位置获取报错${JSON.stringify(e)}`)
         }
