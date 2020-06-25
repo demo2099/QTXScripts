@@ -135,7 +135,6 @@ function location(){
 // #region 天气数据获取
 function weather() {
 	location();
-init();
     support();
     heweatherNow();
     heweatherDaily();
