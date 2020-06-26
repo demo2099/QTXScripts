@@ -2,6 +2,8 @@
 可以自由定制显示的天气脚本,想怎样都随你,轻松修改轻松查看
 https://github.com/sazs34/TaskConfig/blob/master/assets/weather_pro.md
  */
+const $ = API("APP", true); // API("APP") --> 无log输出
+// 测试console
 let config = {
     darksky_api: "bc904d83c094a88ce54a51d076ae86db", //从https://darksky.net/dev/ 上申请key填入即可
     aqicn_api: "777938a72f605f2abd8dc1e79c4d850f5fcf2ea4", //从http://aqicn.org/data-platform/token/#/ 上申请key填入即可
@@ -104,53 +106,41 @@ const    provider = {
 
 
 function location(){
-    $task.fetch({
-        url: "http://ip-api.com/json"
-    }).then(response => {
-        try {
+    $.get("http://ip-api.com/json")
+        .then((response) => {
+            $.log("GET: status: " + response.status);
+            $.log("GET: response headers: \n" + response.headers.toString());
+            $.log("GET: response body: \n" + response.body);
             let darkObj = JSON.parse(response.body);
 
             if (darkObj.error) {
                 $notify("获取位置", "出错啦", response+darkObj.error);
             }
             config.lat_lon = darkObj.lat+","+darkObj.lon;
-            provider.heweather_now.api=`https://free-api.heweather.net/s6/weather/now?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`;
-
-            provider.heweather_daily.api=`https://free-api.heweather.net/s6/weather/forecast?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`;
-
-            provider.heweather_air.api=`https://free-api.heweather.net/s6/air/now?location=auto_ip&key=${config.huweather_apiKey}`;
-
-            provider.heweather_lifestyle.api=`https://free-api.heweather.net/s6/weather/lifestyle?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`;
-
-            provider.darksky.api=`https://api.darksky.net/forecast/${config.darksky_api}/${config.lat_lon.replace(/\s/g, "").replace("，", ",")}?lang=${config.lang}&units=si`;
-            provider.aqicn.api=`https://api.waqi.info/feed/geo:${config.lat_lon.replace(/\s/g, "").replace("，", ",").replace(/,/, ";")}/?token=${config.aqicn_api}`;
-        } catch (e) {
-            console.log(`地理位置获取报错${JSON.stringify(e)}`)
-        }
-    }, reason => {
-        console.log(`地理位置获取报错${JSON.stringify(e)}`)
-    });
+            support();
+            heweatherNow();
+            heweatherDaily();
+            darksky();
+            aqicn();
+            heweatherLifestyle();
+        })
+        .catch((err) => $.notify("GET 请求地点数据失败！", "", err));
 };
 
 // #region 天气数据获取
 function weather() {
     location();
-    support();
-    heweatherNow();
-    heweatherDaily();
-    darksky();
-    aqicn();
-    heweatherLifestyle();
 }
 //clear-day, partly-cloudy-day, cloudy, clear-night, rain, snow, sleet, wind, fog, or partly-cloudy-night
 //☀️🌤⛅️🌥☁️🌦🌧⛈🌩🌨❄️💧💦🌫☔️☂️ ☃️⛄️
 function darksky() {
     if (provider.darksky.progress == 2) return;
     start("darksky");
-    $task.fetch({
-        url: `https://api.darksky.net/forecast/${config.darksky_api}/${config.lat_lon.replace(/\s/g, "").replace("，", ",")}?lang=${config.lang}&units=si`
-    }).then(response => {
-        try {
+    $.get(`https://api.darksky.net/forecast/${config.darksky_api}/${config.lat_lon.replace(/\s/g, "").replace("，", ",")}?lang=${config.lang}&units=si`)
+        .then((response) => {
+            $.log("GET: status: " + response.status);
+            $.log("GET: response headers: \n" + response.headers.toString());
+            $.log("GET: response body: \n" + response.body);
             let darkObj = JSON.parse(response.body);
             record(`天气数据获取-A1-${response.body}`);
             if (darkObj.error) {
@@ -161,22 +151,18 @@ function darksky() {
             provider.darksky.data.currently = darkObj.currently;
             record(`天气数据获取-A2`);
             check('darksky', true)
-        } catch (e) {
-            console.log(`天气数据A获取报错${JSON.stringify(e)}`)
-        }
-    }, reason => {
-        record(`天气数据获取-A3-${reason.error}`);
-        check('darksky', false);
-    });
+        })
+        .catch((err) => $.notify("GET 请求darksky失败！", "", err));
 }
 
 function aqicn() {
     if (provider.aqicn.progress == 2) return;
     start("aqicn");
-    $task.fetch({
-        url: `https://api.waqi.info/feed/geo:${config.lat_lon.replace(/\s/g, "").replace("，", ",").replace(/,/, ";")}/?token=${config.aqicn_api}`
-    }).then(response => {
-        try {
+    $.get(`https://api.waqi.info/feed/geo:${config.lat_lon.replace(/\s/g, "").replace("，", ",").replace(/,/, ";")}/?token=${config.aqicn_api}`)
+        .then((response) => {
+            $.log("GET: status: " + response.status);
+            $.log("GET: response headers: \n" + response.headers.toString());
+            $.log("GET: response body: \n" + response.body);
             var waqiObj = JSON.parse(response.body);
             if (waqiObj.status == 'error') {
                 $notify("Aqicn", "出错啦", waqiObj.data);
@@ -187,79 +173,61 @@ function aqicn() {
                 };
             }
             check('aqicn', true)
-        } catch (e) {
-            console.log(`天气数据B获取报错${JSON.stringify(e)}`)
-        }
-    }, reason => {
-        record(`天气数据获取-B2-${reason.error}`);
-        //获取精确数据失败后，直接获取粗略信息即可
-        heweatherAir();
-    });
+        })
+        .catch((err) => $.notify("GET 请求aqicn失败！", "", err));
 }
 
 function heweatherNow() {
     start("heweather_now");
-    $task.fetch({
-        url: `https://free-api.heweather.net/s6/weather/now?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`
-    }).then(response => {
-        try {
+    $.get(`https://free-api.heweather.net/s6/weather/now?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`)
+        .then((response) => {
+            $.log("GET: status: " + response.status);
+            $.log("GET: response headers: \n" + response.headers.toString());
+            $.log("GET: response body: \n" + response.body);
             record(`天气数据获取-C1-${response.body}`);
             var heObj = JSON.parse(response.body);
             provider.heweather_now.data.basic = heObj.HeWeather6[0].basic;
             provider.heweather_now.data.now = heObj.HeWeather6[0].now;
             check('heweather_now', true)
-        } catch (e) {
-            console.log(`天气数据C获取报错${JSON.stringify(e)}`)
-        }
-    }, reason => {
-        record(`天气数据获取-C2-${reason.error}`);
-        //因为此接口出错率还挺高的,所以即使报错我们也不处理,该返回什么就返回什么好了
-        check('heweather_now', false)
-    })
+        })
+        .catch((err) => $.notify("GET 请求heweatherNow失败！", "", err));
 }
 
 function heweatherDaily() {
     if (provider.heweather_daily.progress == 2) return;
     start("heweather_daily");
-    $task.fetch({
-        url: `https://free-api.heweather.net/s6/weather/forecast?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`
-    }).then(response => {
-        try {
+    $.get(`https://free-api.heweather.net/s6/weather/forecast?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`)
+        .then((response) => {
+            $.log("GET: status: " + response.status);
+            $.log("GET: response headers: \n" + response.headers.toString());
+            $.log("GET: response body: \n" + response.body);
             record(`天气数据获取-D1-${response.body}`);
             var heObj = JSON.parse(response.body);
             provider.heweather_daily.data = heObj.HeWeather6[0].daily_forecast[0];
             check('heweather_daily', true)
-        } catch (e) {
-            console.log(`天气数据D获取报错${JSON.stringify(e)}`)
-        }
-    }, reason => {
-        record(`天气数据获取-D2-${reason.error}`);
-        //因为此接口出错率还挺高的,所以即使报错我们也不处理,该返回什么就返回什么好了
-        check('heweather_daily', false)
-    })
+        })
+        .catch((err) => $.notify("GET 请求heweatherDaily失败！", "", err));
 }
 
 function heweatherAir() {
     if (provider.heweather_air.progress == 2) return;
     start("heweather_air");
-    $task.fetch({
-        url: `https://free-api.heweather.net/s6/air/now?location=auto_ip&key=${config.huweather_apiKey}`
-    }).then(response => {
-        try {
+    if (provider.heweather_daily.progress == 2) return;
+    start("heweather_daily");
+    $.get(`https://free-api.heweather.net/s6/air/now?location=auto_ip&key=${config.huweather_apiKey}`)
+        .then((response) => {
+            $.log("GET: status: " + response.status);
+            $.log("GET: response headers: \n" + response.headers.toString());
+            $.log("GET: response body: \n" + response.body);
             record(`天气数据获取F1-${response.body}`);
             var heObj = JSON.parse(response.body);
             provider.heweather_air.data = {
                 ...getAqiInfo(heObj.HeWeather6[0].air_now_city.aqi)
             };
             check('heweather_air', true)
-        } catch (e) {
-            console.log(`天气数据F获取报错${JSON.stringify(e)}`)
-        }
-    }, reason => {
-        record(`天气数据获取-F2-${reason.error}`);
-        //因为此接口出错率还挺高的,所以即使报错我们也不处理,该返回什么就返回什么好了
-        check('heweather_air', false)
-    })
+        })
+        .catch((err) => $.notify("GET 请求heweatherAir失败！", "", err));
+
 }
 
 function heweatherLifestyle() {
@@ -274,22 +242,17 @@ function heweatherLifestyle() {
         }
     }
     if (needRequest) {
-        $task.fetch({
-            url: `https://free-api.heweather.net/s6/weather/lifestyle?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`
-        }).then(response => {
-            try {
+        $.get( `https://free-api.heweather.net/s6/weather/lifestyle?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`)
+            .then((response) => {
+                $.log("GET: status: " + response.status);
+                $.log("GET: response headers: \n" + response.headers.toString());
+                $.log("GET: response body: \n" + response.body);
                 record(`天气数据获取-E1-${response.body}`);
                 var heObj = JSON.parse(response.body);
                 provider.heweather_lifestyle.data = heObj.HeWeather6[0].lifestyle;
                 check('heweather_lifestyle', true)
-            } catch (e) {
-                console.log(`天气数据E获取报错${JSON.stringify(e)}`)
-            }
-        }, reason => {
-            record(`天气数据获取-E2-${reason.error}`);
-            //因为此接口出错率还挺高的,所以即使报错我们也不处理,该返回什么就返回什么好了
-            check('heweather_lifestyle', false)
-        })
+            })
+            .catch((err) => $.notify("GET 请求heweatherLifestyle失败！", "", err));
     } else {
         check('heweather_lifestyle', false)
     }
@@ -862,13 +825,13 @@ String.prototype.toDateTime = function () {
 }
 Date.prototype.Format = function (fmt) {
     var o = {
-        "M+": this.getMonth() + 1, //月份   
-        "d+": this.getDate(), //日   
-        "h+": this.getHours(), //小时   
-        "m+": this.getMinutes(), //分   
-        "s+": this.getSeconds(), //秒   
-        "q+": Math.floor((this.getMonth() + 3) / 3), //季度   
-        "S": this.getMilliseconds() //毫秒   
+        "M+": this.getMonth() + 1, //月份
+        "d+": this.getDate(), //日
+        "h+": this.getHours(), //小时
+        "m+": this.getMinutes(), //分
+        "s+": this.getSeconds(), //秒
+        "q+": Math.floor((this.getMonth() + 3) / 3), //季度
+        "S": this.getMilliseconds() //毫秒
     };
     if (/(y+)/.test(fmt))
         fmt = fmt.replace(RegExp.$1, (this.getFullYear() + "").substr(4 - RegExp.$1.length));
@@ -879,3 +842,9 @@ Date.prototype.Format = function (fmt) {
 }
 // #endregion
 weather();
+$.done();
+
+// prettier-ignore
+/*********************************** API *************************************/
+function API(t="untitled",s=!1){return new class{constructor(t,s){this.name=t,this.debug=s,this.isQX="undefined"!=typeof $task,this.isLoon="undefined"!=typeof $loon,this.isSurge="undefined"!=typeof $httpClient&&!this.isLoon,this.isNode="function"==typeof require,this.isJSBox=this.isNode&&"undefined"!=typeof $jsbox,this.node=(()=>this.isNode?{request:"undefined"!=typeof $request?void 0:require("request"),fs:require("fs")}:null)(),this.cache=this.initCache(),this.log(`INITIAL CACHE:\n${JSON.stringify(this.cache)}`),Promise.prototype.delay=function(t){return this.then(function(s){return((t,s)=>new Promise(function(e){setTimeout(e.bind(null,s),t)}))(t,s)})}}get(t){return this.isQX?("string"==typeof t&&(t={url:t,method:"GET"}),$task.fetch(t)):new Promise((s,e)=>{this.isLoon||this.isSurge?$httpClient.get(t,(t,i,o)=>{t?e(t):s({status:i.status,headers:i.headers,body:o})}):this.node.request(t,(t,i,o)=>{t?e(t):s({...i,status:i.statusCode,body:o})})})}post(t){return this.isQX?("string"==typeof t&&(t={url:t}),t.method="POST",$task.fetch(t)):new Promise((s,e)=>{this.isLoon||this.isSurge?$httpClient.post(t,(t,i,o)=>{t?e(t):s({status:i.status,headers:i.headers,body:o})}):this.node.request.post(t,(t,i,o)=>{t?e(t):s({...i,status:i.statusCode,body:o})})})}initCache(){if(this.isQX)return JSON.parse($prefs.valueForKey(this.name)||"{}");if(this.isLoon||this.isSurge)return JSON.parse($persistentStore.read(this.name)||"{}");if(this.isNode){const t=`${this.name}.json`;return this.node.fs.existsSync(t)?JSON.parse(this.node.fs.readFileSync(`${this.name}.json`)):(this.node.fs.writeFileSync(t,JSON.stringify({}),{flag:"wx"},t=>console.log(t)),{})}}persistCache(){const t=JSON.stringify(this.cache);this.log(`FLUSHING DATA:\n${t}`),this.isQX&&$prefs.setValueForKey(t,this.name),(this.isLoon||this.isSurge)&&$persistentStore.write(t,this.name),this.isNode&&this.node.fs.writeFileSync(`${this.name}.json`,t,{flag:"w"},t=>console.log(t))}write(t,s){this.log(`SET ${s} = ${JSON.stringify(t)}`),this.cache[s]=t,this.persistCache()}read(t){return this.log(`READ ${t} ==> ${JSON.stringify(this.cache[t])}`),this.cache[t]}delete(t){this.log(`DELETE ${t}`),delete this.cache[t],this.persistCache()}notify(t,s,e,i){const o="string"==typeof i?i:void 0,n=e+(null==o?"":`\n${o}`);this.isQX&&(void 0!==o?$notify(t,s,e,{"open-url":o}):$notify(t,s,e,i)),this.isSurge&&$notification.post(t,s,n),this.isLoon&&$notification.post(t,s,e),this.isNode&&(this.isJSBox?require("push").schedule({title:t,body:s?s+"\n"+e:e}):console.log(`${t}\n${s}\n${n}\n\n`))}log(t){this.debug&&console.log(t)}info(t){console.log(t)}error(t){console.log("ERROR: "+t)}wait(t){return new Promise(s=>setTimeout(s,t))}done(t={}){this.isQX||this.isLoon||this.isSurge?$done(t):this.isNode&&!this.isJSBox&&"undefined"!=typeof $context&&($context.headers=t.headers,$context.statusCode=t.statusCode,$context.body=t.body)}}(t,s)}
+/*****************************************************************************/
