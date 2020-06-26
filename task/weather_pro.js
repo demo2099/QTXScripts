@@ -108,9 +108,6 @@ const    provider = {
 function location(){
     $.get("http://ip-api.com/json")
         .then((response) => {
-            $.log("GET: status: " + response.status);
-            $.log("GET: response headers: \n" + response.headers.toString());
-            $.log("GET: response body: \n" + response.body);
             let darkObj = JSON.parse(response.body);
 
             if (darkObj.error) {
@@ -138,9 +135,6 @@ function darksky() {
     start("darksky");
     $.get(`https://api.darksky.net/forecast/${config.darksky_api}/${config.lat_lon.replace(/\s/g, "").replace("，", ",")}?lang=${config.lang}&units=si`)
         .then((response) => {
-            $.log("GET: status: " + response.status);
-            $.log("GET: response headers: \n" + response.headers.toString());
-            $.log("GET: response body: \n" + response.body);
             let darkObj = JSON.parse(response.body);
             record(`天气数据获取-A1-${response.body}`);
             if (darkObj.error) {
@@ -160,9 +154,6 @@ function aqicn() {
     start("aqicn");
     $.get(`https://api.waqi.info/feed/geo:${config.lat_lon.replace(/\s/g, "").replace("，", ",").replace(/,/, ";")}/?token=${config.aqicn_api}`)
         .then((response) => {
-            $.log("GET: status: " + response.status);
-            $.log("GET: response headers: \n" + response.headers.toString());
-            $.log("GET: response body: \n" + response.body);
             var waqiObj = JSON.parse(response.body);
             if (waqiObj.status == 'error') {
                 $notify("Aqicn", "出错啦", waqiObj.data);
@@ -181,9 +172,6 @@ function heweatherNow() {
     start("heweather_now");
     $.get(`https://free-api.heweather.net/s6/weather/now?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`)
         .then((response) => {
-            $.log("GET: status: " + response.status);
-            $.log("GET: response headers: \n" + response.headers.toString());
-            $.log("GET: response body: \n" + response.body);
             record(`天气数据获取-C1-${response.body}`);
             var heObj = JSON.parse(response.body);
             provider.heweather_now.data.basic = heObj.HeWeather6[0].basic;
@@ -198,9 +186,6 @@ function heweatherDaily() {
     start("heweather_daily");
     $.get(`https://free-api.heweather.net/s6/weather/forecast?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`)
         .then((response) => {
-            $.log("GET: status: " + response.status);
-            $.log("GET: response headers: \n" + response.headers.toString());
-            $.log("GET: response body: \n" + response.body);
             record(`天气数据获取-D1-${response.body}`);
             var heObj = JSON.parse(response.body);
             provider.heweather_daily.data = heObj.HeWeather6[0].daily_forecast[0];
@@ -216,9 +201,6 @@ function heweatherAir() {
     start("heweather_daily");
     $.get(`https://free-api.heweather.net/s6/air/now?location=auto_ip&key=${config.huweather_apiKey}`)
         .then((response) => {
-            $.log("GET: status: " + response.status);
-            $.log("GET: response headers: \n" + response.headers.toString());
-            $.log("GET: response body: \n" + response.body);
             record(`天气数据获取F1-${response.body}`);
             var heObj = JSON.parse(response.body);
             provider.heweather_air.data = {
@@ -244,9 +226,6 @@ function heweatherLifestyle() {
     if (needRequest) {
         $.get( `https://free-api.heweather.net/s6/weather/lifestyle?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`)
             .then((response) => {
-                $.log("GET: status: " + response.status);
-                $.log("GET: response headers: \n" + response.headers.toString());
-                $.log("GET: response body: \n" + response.body);
                 record(`天气数据获取-E1-${response.body}`);
                 var heObj = JSON.parse(response.body);
                 provider.heweather_lifestyle.data = heObj.HeWeather6[0].lifestyle;
