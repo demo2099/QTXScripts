@@ -2,11 +2,12 @@
 可以自由定制显示的天气脚本,想怎样都随你,轻松修改轻松查看
 https://github.com/sazs34/TaskConfig/blob/master/assets/weather_pro.md
  */
+const $ = API("APP", true); // API("APP") --> 无log输出
 let config = {
     darksky_api: "bc904d83c094a88ce54a51d076ae86db", //从https://darksky.net/dev/ 上申请key填入即可
     aqicn_api: "777938a72f605f2abd8dc1e79c4d850f5fcf2ea4", //从http://aqicn.org/data-platform/token/#/ 上申请key填入即可
     huweather_apiKey: "a8820fb1169d4521ac78a881efe03654", //和风天气APIkey,可自行前往 https://dev.heweather.com/ 进行获取(注意key类型选WebApi)
-    lat_lon: "31.23916,121.47918", //请填写经纬度,直接从谷歌地图中获取即可
+    lat_lon: "", //请填写经纬度,直接从谷歌地图中获取即可
     lang: "zh", //语言,随意切换为您想要的语言哦(zh/zh-tw/ja/en/fr/...)
     log: 2, //调试日志,0为不开启,1为开启,2为开启精简日志
     timeout: 0, //超时时间,单位毫秒(1000毫秒=1秒),一般不推荐修改[为0则不限制超时时间]
@@ -37,7 +38,8 @@ let config = {
     }
 }
 
-const provider = {
+
+const    provider = {
     heweather_now: {
         api: `https://free-api.heweather.net/s6/weather/now?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`,
         progress: 0, //处理进度:0需处理1已处理2无需处理9报错
@@ -92,140 +94,113 @@ const provider = {
     }
 }
 
-$tool = Tool()
-$tool.log.level("error")
-weather()
 
-$tool.done()
+
+function location(){
+    $.get("http://ip-api.com/json")
+        .then((response) => {
+            let darkObj = JSON.parse(response.body);
+
+            if (darkObj.error) {
+                $notify("获取位置", "出错啦", response+darkObj.error);
+            }
+            config.lat_lon = darkObj.lat+","+darkObj.lon;
+            support();
+            heweatherNow();
+            heweatherDaily();
+            darksky();
+            aqicn();
+            heweatherLifestyle();
+        })
+        .catch((err) => $.notify("GET 请求地点数据失败！", "", err));
+};
 
 // #region 天气数据获取
 function weather() {
-    support();
-    heweatherNow();
-    heweatherDaily();
-    darksky();
-    aqicn();
-    heweatherLifestyle();
+    location();
 }
 //clear-day, partly-cloudy-day, cloudy, clear-night, rain, snow, sleet, wind, fog, or partly-cloudy-night
 //☀️🌤⛅️🌥☁️🌦🌧⛈🌩🌨❄️💧💦🌫☔️☂️ ☃️⛄️
 function darksky() {
     if (provider.darksky.progress == 2) return;
     start("darksky");
-    $tool.get({url: provider.darksky.api}, function (error, response, body) {
-        if (!error) {
-            try {
-                let darkObj = JSON.parse(body);
-                $tool.log.debug(`天气数据获取-A1-${body}`);
-                if (darkObj.error) {
-                    $tool.notify("DarkApi", "出错啦", darkObj.error);
-                }
-                provider.darksky.data.daily = darkObj.daily;
-                provider.darksky.data.hourly = darkObj.hourly;
-                provider.darksky.data.currently = darkObj.currently;
-                $tool.log.debug(`天气数据获取-A2`);
-                check('darksky', true)
-            } catch (e) {
-                $tool.log.error(`天气数据A获取报错${JSON.stringify(e)}`)
+    $.get(`https://api.darksky.net/forecast/${config.darksky_api}/${config.lat_lon.replace(/\s/g, "").replace("，", ",")}?lang=${config.lang}&units=si`)
+        .then((response) => {
+            let darkObj = JSON.parse(response.body);
+            record(`天气数据获取-A1-${response.body}`);
+            if (darkObj.error) {
+                $notify("DarkApi", "出错啦", darkObj.error);
             }
-        } else {
-            $tool.log.error(`天气数据获取-A3-${reason.error}`);
-            check('darksky', false);
-        }
-
-    })
+            provider.darksky.data.daily = darkObj.daily;
+            provider.darksky.data.hourly = darkObj.hourly;
+            provider.darksky.data.currently = darkObj.currently;
+            record(`天气数据获取-A2`);
+            check('darksky', true)
+        })
+        .catch((err) => $.notify("GET 请求darksky失败！", "", err));
 }
 
 function aqicn() {
     if (provider.aqicn.progress == 2) return;
     start("aqicn");
-    $tool.get({url: provider.aqicn.api}, function (error, response, body) {
-        if (!error) {
-            try {
-                var waqiObj = JSON.parse(body);
-                if (waqiObj.status == 'error') {
-                    $tool.notify("Aqicn", "出错啦", waqiObj.data);
-                } else {
-                    $tool.log.debug(`天气数据获取-B1-${body}`);
-                    provider.aqicn.data = {
-                        ...getAqiInfo(waqiObj.data.aqi)
-                    };
-                }
-                check('aqicn', true)
-            } catch (e) {
-                $tool.log.error(`天气数据B获取报错${JSON.stringify(e)}`)
+    $.get(`https://api.waqi.info/feed/geo:${config.lat_lon.replace(/\s/g, "").replace("，", ",").replace(/,/, ";")}/?token=${config.aqicn_api}`)
+        .then((response) => {
+            var waqiObj = JSON.parse(response.body);
+            if (waqiObj.status == 'error') {
+                $notify("Aqicn", "出错啦", waqiObj.data);
+            } else {
+                record(`天气数据获取-B1-${response.body}`);
+                provider.aqicn.data = {
+                    ...getAqiInfo(waqiObj.data.aqi)
+                };
             }
-        } else {
-            $tool.log.error(`天气数据获取-B2-${reason.error}`);
-            //获取精确数据失败后，直接获取粗略信息即可
-            heweatherAir();
-        }
-    })
+            check('aqicn', true)
+        })
+        .catch((err) => $.notify("GET 请求aqicn失败！", "", err));
 }
 
 function heweatherNow() {
     start("heweather_now");
-    $tool.get({url: provider.heweather_now.api}, function (error, response, body) {
-        if (!error) {
-            try {
-                $tool.log.debug(`天气数据获取-C1-${body}`);
-                var heObj = JSON.parse(body);
-                provider.heweather_now.data.basic = heObj.HeWeather6[0].basic;
-                provider.heweather_now.data.now = heObj.HeWeather6[0].now;
-                check('heweather_now', true)
-            } catch (e) {
-                $tool.log.error(`天气数据C获取报错${JSON.stringify(e)}`)
-            }
-        } else {
-            $tool.log.error(`天气数据获取-C2-${reason.error}`);
-            //因为此接口出错率还挺高的,所以即使报错我们也不处理,该返回什么就返回什么好了
-            check('heweather_now', false)
-        }
-    })
+    $.get(`https://free-api.heweather.net/s6/weather/now?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`)
+        .then((response) => {
+            record(`天气数据获取-C1-${response.body}`);
+            var heObj = JSON.parse(response.body);
+            provider.heweather_now.data.basic = heObj.HeWeather6[0].basic;
+            provider.heweather_now.data.now = heObj.HeWeather6[0].now;
+            check('heweather_now', true)
+        })
+        .catch((err) => $.notify("GET 请求heweatherNow失败！", "", err));
 }
 
 function heweatherDaily() {
     if (provider.heweather_daily.progress == 2) return;
     start("heweather_daily");
-    $tool.get({url: provider.heweather_daily.api}, function (error, response, body) {
-        if (!error) {
-            try {
-                $tool.log.debug(`天气数据获取-D1-${body}`);
-                var heObj = JSON.parse(body);
-                provider.heweather_daily.data = heObj.HeWeather6[0].daily_forecast[0];
-                check('heweather_daily', true)
-            } catch (e) {
-                $tool.log.error(`天气数据D获取报错${JSON.stringify(e)}`)
-            }
-        } else {
-            $tool.log.error(`天气数据获取-D2-${reason.error}`);
-            //因为此接口出错率还挺高的,所以即使报错我们也不处理,该返回什么就返回什么好了
-            check('heweather_daily', false)
-        }
-    })
+    $.get(`https://free-api.heweather.net/s6/weather/forecast?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`)
+        .then((response) => {
+            record(`天气数据获取-D1-${response.body}`);
+            var heObj = JSON.parse(response.body);
+            provider.heweather_daily.data = heObj.HeWeather6[0].daily_forecast[0];
+            check('heweather_daily', true)
+        })
+        .catch((err) => $.notify("GET 请求heweatherDaily失败！", "", err));
 }
 
 function heweatherAir() {
     if (provider.heweather_air.progress == 2) return;
     start("heweather_air");
-    $tool.get({url: provider.heweather_air.api}, function (error, response, body) {
-        if (!error) {
-            try {
-                $tool.log.debug(`天气数据获取F1-${body}`);
-                var heObj = JSON.parse(body);
-                provider.heweather_air.data = {
-                    ...getAqiInfo(heObj.HeWeather6[0].air_now_city.aqi)
-                };
-                check('heweather_air', true)
-            } catch (e) {
-                $tool.log.error(`天气数据F获取报错${JSON.stringify(e)}`)
-            }
-        } else {
-            $tool.log.error(`天气数据获取-F2-${reason.error}`);
-            //因为此接口出错率还挺高的,所以即使报错我们也不处理,该返回什么就返回什么好了
-            check('heweather_air', false)
-        }
-    })
+    if (provider.heweather_daily.progress == 2) return;
+    start("heweather_daily");
+    $.get(`https://free-api.heweather.net/s6/air/now?location=auto_ip&key=${config.huweather_apiKey}`)
+        .then((response) => {
+            record(`天气数据获取F1-${response.body}`);
+            var heObj = JSON.parse(response.body);
+            provider.heweather_air.data = {
+                ...getAqiInfo(heObj.HeWeather6[0].air_now_city.aqi)
+            };
+            check('heweather_air', true)
+        })
+        .catch((err) => $.notify("GET 请求heweatherAir失败！", "", err));
+
 }
 
 function heweatherLifestyle() {
@@ -240,22 +215,14 @@ function heweatherLifestyle() {
         }
     }
     if (needRequest) {
-        $tool.get({url: provider.heweather_lifestyle.api}, function (error, response, body) {
-            if (!error) {
-                try {
-                    $tool.log.debug(`天气数据获取-E1-${body}`);
-                    var heObj = JSON.parse(body);
-                    provider.heweather_lifestyle.data = heObj.HeWeather6[0].lifestyle;
-                    check('heweather_lifestyle', true)
-                } catch (e) {
-                    $tool.log.error(`天气数据E获取报错${JSON.stringify(e)}`)
-                }
-            } else {
-                $tool.log.error(`天气数据获取-E2-${reason.error}`);
-                //因为此接口出错率还挺高的,所以即使报错我们也不处理,该返回什么就返回什么好了
-                check('heweather_lifestyle', false)
-            }
-        })
+        $.get( `https://free-api.heweather.net/s6/weather/lifestyle?location=${config.lat_lon.replace(/\s/g, "").replace("，", ",")}&key=${config.huweather_apiKey}`)
+            .then((response) => {
+                record(`天气数据获取-E1-${response.body}`);
+                var heObj = JSON.parse(response.body);
+                provider.heweather_lifestyle.data = heObj.HeWeather6[0].lifestyle;
+                check('heweather_lifestyle', true)
+            })
+            .catch((err) => $.notify("GET 请求heweatherLifestyle失败！", "", err));
     } else {
         check('heweather_lifestyle', false)
     }
@@ -264,23 +231,18 @@ function heweatherLifestyle() {
 
 // #region 提醒数据组装
 function check(type, result) {
-    $tool.log.debug(`check-${type}-${result}`);
-    try {
-        //支持setTimeout居然不支持clearTimeout,有点难受
-        if (provider[type].progress == 1 || provider[type].progress == 9) return;
-        provider[type].progress = result ? 1 : 9;
-        var isAllChecked = provider.heweather_now.progress != 0 && provider.heweather_daily.progress != 0 && provider.darksky.progress != 0 && (provider.aqicn.progress != 0 || provider.heweather_air.progress != 0) && provider.heweather_lifestyle.progress != 0;
-        // var isAllChecked = true
-        if (isAllChecked) {
-            $tool.log.debug(`天气数据渲染中[template]`);
-            try {
-                renderTemplate();
-            } catch (e) {
-                $tool.log.error(`天气渲染出错-${JSON.stringify(e)}`);
-            }
+    record(`check-${type}-${result}`);
+    //支持setTimeout居然不支持clearTimeout,有点难受
+    if (provider[type].progress == 1 || provider[type].progress == 9) return;
+    provider[type].progress = result ? 1 : 9;
+    var isAllChecked = provider.heweather_now.progress != 0 && provider.heweather_daily.progress && provider.darksky.progress != 0 && (provider.aqicn.progress != 0 || provider.heweather_air.progress != 0) && provider.heweather_lifestyle.progress != 0;
+    if (isAllChecked) {
+        record(`天气数据渲染中[template]`);
+        try {
+            renderTemplate();
+        } catch (e) {
+            record(`天气渲染出错-${JSON.stringify(e)}`);
         }
-    } catch (lineerror) {
-        $tool.log.error(`check error: ${lineerror}`)
     }
 }
 
@@ -366,7 +328,8 @@ function renderTemplate() {
         subtitle: execTemplate(config.show.template.subtitle, map),
         detail: execTemplate(config.show.template.detail, map),
     };
-    $tool.notify(notifyInfo.title, notifyInfo.subtitle, notifyInfo.detail);
+    $notify(notifyInfo.title, notifyInfo.subtitle, notifyInfo.detail);
+    $done({});
 }
 // #endregion
 
@@ -490,7 +453,7 @@ function getCityInfo(name) {
         }
     } catch (e) {
         loc = '';
-        $tool.log.error(`获取城市名称失败-${JSON.stringify(e)}`);
+        record(`获取城市名称失败-${JSON.stringify(e)}`);
     }
     return loc;
 }
@@ -591,7 +554,7 @@ function support() {
         let regexHourly = /\$\[(hourly\()+([\s\S]+?)(\))+\]/g;
         provider.darksky.progress = (regexDaily.test(config.show.template.detail) || regexHourly.test(config.show.template.detail)) ? 0 : 2;
     }
-    $tool.log.debug(`h_n:${provider.heweather_now.progress},h_d:${provider.heweather_daily.progress},h_a:${provider.heweather_air.progress},h_l:${provider.heweather_lifestyle.progress},aq:${provider.aqicn.progress},da:${provider.darksky.progress}`)
+    record(`h_n:${provider.heweather_now.progress},h_d:${provider.heweather_daily.progress},h_a:${provider.heweather_air.progress},h_l:${provider.heweather_lifestyle.progress},aq:${provider.aqicn.progress},da:${provider.darksky.progress}`)
 }
 /**
  * 用于普通模板的映射
@@ -620,7 +583,7 @@ function execArrayTemplate() {
         execTemplateDaily();
         execTemplateHourly();
     } catch (e) {
-        $tool.log.error(`${JSON.stringify(e)}`)
+        console.log(`${JSON.stringify(e)}`)
     }
 
 }
@@ -809,6 +772,13 @@ function execTemplateHourly() {
     }
 }
 
+function record(log) {
+    if (config.log == 1) {
+        console.log(log);
+    } else if (config.log == 2) {
+        console.log(log.substring(0, 60));
+    }
+}
 // #endregion
 
 // #region 扩展方法
@@ -825,13 +795,13 @@ String.prototype.toDateTime = function () {
 }
 Date.prototype.Format = function (fmt) {
     var o = {
-        "M+": this.getMonth() + 1, //月份   
-        "d+": this.getDate(), //日   
-        "h+": this.getHours(), //小时   
-        "m+": this.getMinutes(), //分   
-        "s+": this.getSeconds(), //秒   
-        "q+": Math.floor((this.getMonth() + 3) / 3), //季度   
-        "S": this.getMilliseconds() //毫秒   
+        "M+": this.getMonth() + 1, //月份
+        "d+": this.getDate(), //日
+        "h+": this.getHours(), //小时
+        "m+": this.getMinutes(), //分
+        "s+": this.getSeconds(), //秒
+        "q+": Math.floor((this.getMonth() + 3) / 3), //季度
+        "S": this.getMilliseconds() //毫秒
     };
     if (/(y+)/.test(fmt))
         fmt = fmt.replace(RegExp.$1, (this.getFullYear() + "").substr(4 - RegExp.$1.length));
@@ -841,318 +811,10 @@ Date.prototype.Format = function (fmt) {
     return fmt;
 }
 // #endregion
+weather();
+$.done();
 
-// https://github.com/yichahucha/surge/blob/master/tool.js
-//https://github.com/chavyleung/scripts/blob/master/chavy.js
-// 工具方法编写参考了以上脚本，在此感谢 🙏
-function Tool() {
-    // app
-    const _isQuanX = typeof $task != "undefined"
-    const _isSurge = typeof $httpClient != "undefined"
-    const _isJSBox = typeof $app != "undefined" && $app.info.bundleID == "app.cyan.jsbox"
-    const _isNode = typeof require == "function" && !_isJSBox
-
-    // environment
-    const _isRequest = typeof $request != "undefined"
-    const _isResponse = typeof $response != "undefined"
-
-    const ishttp = _isRequest || _isResponse
-
-    // require Tools
-    const _requireTools = (() => {
-        var tools = {}
-        if (typeof require == "function") {
-            let request = require('request')
-            if (request) tools.request = request
-            let fs = require("fs")
-            if (fs) tools.fs = fs
-        }
-        return tools
-    })()
-
-    // config
-    const _nodeStoreName = "prefs.json"
-
-    // custom log
-    // if you want to add log level, just add to _logLevels
-    const _log = (() => {
-        // default log value
-        let _logLevel = "debug"
-
-        const _logLevels = new Array("trace", "debug", "info", "warn", "error", "fatal")
-
-        // 默认显示日志等级
-        let _isShowLevel = true
-
-        // 设置日志等级，返回值为当前等级
-        const _setLogLevel = (level = "") => {
-            if (_logLevels.indexOf(level) > -1) {
-                _logLevel = level
-            }
-            return _logLevel
-        }
-
-        const showLevel = (isShow) => {
-            if (typeof isShow == "boolean") {
-                _isShowLevel = isShow
-            }
-            return _isShowLevel
-        }
-
-        // 过滤低等级日志信息
-        const _filterLog = (level, callback) => {
-            let index = _logLevels.indexOf(level)
-            let current = _logLevels.indexOf(_setLogLevel())
-            if (index > -1) {
-                if (index >= current) {
-                    callback()
-                }
-            } else {
-                callback()
-            }
-        }
-
-        const _setLogFunction = (level) => {
-            return (message) => {
-                _filterLog(level, (() => {
-                    if (showLevel()) {
-                        console.log(`<${level}> ${message}`)
-                    } else {
-                        console.log(message)
-                    }
-                }))
-            }
-        }
-
-        let level = _setLogLevel
-        let log = _filterLog
-        var logFunc = {level, log, showLevel}
-        _logLevels.forEach((item) => {
-            logFunc[item] = _setLogFunction(item)
-        })
-
-        return logFunc
-    })
-
-    const log = _log()
-
-    // setTimeout
-    const timeout = (() => {
-        if (typeof setTimeout != "undefined") {
-            return setTimeout
-        }
-        return (handler, timeout = 0) => {
-            handler()
-        }
-    })()
-
-    // notification
-    const notify = (title, subtitle, message) => {
-        if (_isQuanX) {
-            $notify(title, subtitle, message)
-        }
-        if (_isSurge) {
-            $notification.post(title, subtitle, message)
-        }
-        if (_isNode) {
-            console.log(JSON.stringify({title, subtitle, message}))
-        }
-        if (_isJSBox) {
-            if (subtitle && message) {
-                $push.schedule({title: title, body: subtitle + "\n" + message})
-            } else {
-                $push.schedule({title: title, body: subtitle + message})
-            }
-        }
-    }
-
-    // store
-    const read = (key) => {
-        if (_isQuanX) return $prefs.valueForKey(key)
-        if (_isSurge) return $persistentStore.read(key)
-        if (_isJSBox) return _jsBoxRead(key)
-        if (_isNode) return _nodeRead(key)
-    }
-
-    const write = (value, key) => {
-        if (_isQuanX) return $prefs.setValueForKey(value, key)
-        if (_isSurge) return $persistentStore.write(value, key)
-        if (_isJSBox) return _jsBoxWrite(value, key)
-        if (_isNode) return _nodeWrite(value, key)
-    }
-
-    const _nodeRead = (key) => {
-        try {
-            var data = JSON.parse(_requireTools.fs.readFileSync(_nodeStoreName))
-            if (typeof data[key] != "undefined") {
-                return data[key]
-            }
-        } catch (error) {
-            log.error(error)
-        }
-        return ""
-    }
-
-    const _nodeWrite = (value, key) => {
-        try {
-            if (!_requireTools.fs.existsSync(_nodeStoreName)) {
-                _requireTools.fs.writeFileSync(_nodeStoreName, JSON.stringify({}))
-            }
-            var data = JSON.parse(_requireTools.fs.readFileSync(_nodeStoreName))
-            data[key] = value
-            _requireTools.fs.writeFileSync(_nodeStoreName, JSON.stringify(data))
-            return true
-        } catch (error) {
-            log.error(error)
-        }
-        return false
-    }
-
-    const _jsBoxRead = (key) => {
-        try {
-            if (_jsBoxEnvName != "icloud") {
-                return $prefs.get(key)
-            }
-            if (typeof $drive != "undefined") {
-                let filePath = "Code/" + _nodeStoreName
-                if ($drive.exists(filePath)) {
-                    let content = $drive.read(filePath)
-                    if (content) {
-                        let data = JSON.parse(content)
-                        if (typeof data[key] != "undefined") {
-                            return data[key]
-                        }
-                    }
-                }
-            }
-        } catch (error) {
-            log.error(error)
-        }
-        return ""
-    }
-
-    const _jsBoxWrite = (value, key) => {
-        try {
-            if (_jsBoxEnvName != "icloud") {
-                return $prefs.set(key, value)
-            }
-            if (typeof $drive != "undefined") {
-                let filePath = "Code/" + _nodeStoreName
-                var data = {}
-                if ($drive.exists(filePath)) {
-                    let content = $drive.read(filePath)
-                    data = JSON.parse(content)
-                }
-                data[key] = value
-                return $drive.write({data: $data({string: JSON.stringify(data)}), path: filePath})
-            }
-        } catch (error) {
-            log.error(error)
-        }
-        return false
-    }
-
-    const _jsBoxEnvName = (() => {
-        if (typeof $addin != "undefined") {
-            if (typeof $addin.current == "undefined") {
-                // 运行在icloud
-                return "icloud"
-            } else {
-
-                let _version = typeof $addin.current.version != "undefined"
-                let _author = typeof $addin.current.author != "undefined"
-                let _url = typeof $addin.current.url != "undefined"
-                let _website = typeof $addin.current.website != "undefined"
-                if (_version || _author || _url || _website) {
-                    // jsBox 应用
-                    return "app"
-                } else {
-                    // jsBox 脚本
-                    return "script"
-                }
-            }
-        }
-        return ""
-    })()
-
-    // http request
-    const get = (options, callback) => {
-        if (_isQuanX) {
-            if (typeof options == "string") options = {url: options}
-            options["method"] = "GET"
-            $task.fetch(options).then(response => {
-                callback(null, _status(response), response.body)
-            }, reason => callback(reason.error, null, null))
-        }
-        if (_isSurge) $httpClient.get(options, (error, response, body) => {
-            callback(error, _status(response), body)
-        });
-        if (_isNode) {
-            _requireTools.request(options, (error, response, body) => {
-                callback(error, _status(response), body)
-            })
-        }
-        if (_isJSBox) $http.get(_jsBoxRequest(options, callback))
-    }
-    const post = (options, callback) => {
-        if (_isQuanX) {
-            if (typeof options == "string") options = {url: options}
-            options["method"] = "POST"
-            $task.fetch(options).then(response => {
-                callback(null, _status(response), response.body)
-            }, reason => callback(reason.error, null, null))
-        }
-        if (_isSurge) {
-            $httpClient.post(options, (error, response, body) => {
-                callback(error, _status(response), body)
-            })
-        }
-        if (_isNode) {
-            _requireTools.request.post(options, (error, response, body) => {
-                callback(error, _status(response), body)
-            })
-        }
-        if (_isJSBox) $http.post(_jsBoxRequest(options, callback))
-    }
-
-    const _jsBoxRequest = (options, callback) => {
-        if (typeof options == "string") options = {url: options}
-        options["header"] = options["headers"]
-        delete options["headers"]
-        let body = options["body"]
-        if (typeof body != "undefined") {
-            try {
-                body = JSON.parse(body)
-                options["body"] = body
-            } catch (e) {
-            }
-        }
-        options["handler"] = function (resp) {
-            let error = resp.error
-            if (error) error = JSON.stringify(resp.error)
-            let body = resp.data
-            if (typeof body == "object") body = JSON.stringify(resp.data)
-            callback(error, _status(resp.response), body)
-        }
-        return options
-    }
-
-    const _status = (response) => {
-        if (response) {
-            if (response.status) {
-                response["statusCode"] = response.status
-            } else if (response.statusCode) {
-                response["status"] = response.statusCode
-            }
-        }
-        return response
-    }
-
-    // done
-    const done = (value = {}) => {
-        if (_isQuanX) ishttp ? $done(value) : ""
-        if (_isSurge) ishttp ? $done(value) : $done()
-    }
-
-    return {read, write, notify, get, post, ishttp, log, timeout, done}
-}
+// prettier-ignore
+/*********************************** API *************************************/
+function API(t="untitled",s=!1){return new class{constructor(t,s){this.name=t,this.debug=s,this.isQX="undefined"!=typeof $task,this.isLoon="undefined"!=typeof $loon,this.isSurge="undefined"!=typeof $httpClient&&!this.isLoon,this.isNode="function"==typeof require,this.isJSBox=this.isNode&&"undefined"!=typeof $jsbox,this.node=(()=>this.isNode?{request:"undefined"!=typeof $request?void 0:require("request"),fs:require("fs")}:null)(),this.cache=this.initCache(),this.log(`INITIAL CACHE:\n${JSON.stringify(this.cache)}`),Promise.prototype.delay=function(t){return this.then(function(s){return((t,s)=>new Promise(function(e){setTimeout(e.bind(null,s),t)}))(t,s)})}}get(t){return this.isQX?("string"==typeof t&&(t={url:t,method:"GET"}),$task.fetch(t)):new Promise((s,e)=>{this.isLoon||this.isSurge?$httpClient.get(t,(t,i,o)=>{t?e(t):s({status:i.status,headers:i.headers,body:o})}):this.node.request(t,(t,i,o)=>{t?e(t):s({...i,status:i.statusCode,body:o})})})}post(t){return this.isQX?("string"==typeof t&&(t={url:t}),t.method="POST",$task.fetch(t)):new Promise((s,e)=>{this.isLoon||this.isSurge?$httpClient.post(t,(t,i,o)=>{t?e(t):s({status:i.status,headers:i.headers,body:o})}):this.node.request.post(t,(t,i,o)=>{t?e(t):s({...i,status:i.statusCode,body:o})})})}initCache(){if(this.isQX)return JSON.parse($prefs.valueForKey(this.name)||"{}");if(this.isLoon||this.isSurge)return JSON.parse($persistentStore.read(this.name)||"{}");if(this.isNode){const t=`${this.name}.json`;return this.node.fs.existsSync(t)?JSON.parse(this.node.fs.readFileSync(`${this.name}.json`)):(this.node.fs.writeFileSync(t,JSON.stringify({}),{flag:"wx"},t=>console.log(t)),{})}}persistCache(){const t=JSON.stringify(this.cache);this.log(`FLUSHING DATA:\n${t}`),this.isQX&&$prefs.setValueForKey(t,this.name),(this.isLoon||this.isSurge)&&$persistentStore.write(t,this.name),this.isNode&&this.node.fs.writeFileSync(`${this.name}.json`,t,{flag:"w"},t=>console.log(t))}write(t,s){this.log(`SET ${s} = ${JSON.stringify(t)}`),this.cache[s]=t,this.persistCache()}read(t){return this.log(`READ ${t} ==> ${JSON.stringify(this.cache[t])}`),this.cache[t]}delete(t){this.log(`DELETE ${t}`),delete this.cache[t],this.persistCache()}notify(t,s,e,i){const o="string"==typeof i?i:void 0,n=e+(null==o?"":`\n${o}`);this.isQX&&(void 0!==o?$notify(t,s,e,{"open-url":o}):$notify(t,s,e,i)),this.isSurge&&$notification.post(t,s,n),this.isLoon&&$notification.post(t,s,e),this.isNode&&(this.isJSBox?require("push").schedule({title:t,body:s?s+"\n"+e:e}):console.log(`${t}\n${s}\n${n}\n\n`))}log(t){this.debug&&console.log(t)}info(t){console.log(t)}error(t){console.log("ERROR: "+t)}wait(t){return new Promise(s=>setTimeout(s,t))}done(t={}){this.isQX||this.isLoon||this.isSurge?$done(t):this.isNode&&!this.isJSBox&&"undefined"!=typeof $context&&($context.headers=t.headers,$context.statusCode=t.statusCode,$context.body=t.body)}}(t,s)}
+/*****************************************************************************/
