@@ -1,7 +1,8 @@
 /*
-
+邀请码:53150681
 公众号iosrule by红鲤鱼与绿鲤鱼与驴
-2020.6.27
+2020.6.28
+增加小视频和视频奖励ck
 
 ====================================
 获取ck完毕可以禁止该js
@@ -39,7 +40,7 @@ const htt_signbdname="htt_signbdname"+httid;
 
 const htt_videoname="htt_videoname"+httid;
 
-
+const htt_smvideoname="htt_smvideoname"+httid;
 
 
 
@@ -105,11 +106,18 @@ if(md_bd.indexOf("dongfang")>0)
 if (httbdo==true) 
  papa(tt,"[阅读ck]","写入" + tt + "阅读数据成功");}
 
-else if(md_bd.indexOf("video")>0)
+else if(md_bd.indexOf("video")>0&&md_bd.indexOf("self_smallvideo")<0)
 
  {var httbdo= $iosrule.write(md_bd,htt_videoname);
 if (httbdo==true) 
  papa(tt,"[视频ck]","写入" + tt + "视频数据成功");}
+
+else if(md_bd.indexOf("self_smallvideo")>0)
+
+ {var httbdo= $iosrule.write(md_bd,htt_smvideoname);
+if (httbdo==true) 
+ papa(tt,"[小视频ck]","写入" + tt + "小视频数据成功");}
+
 
 }
 }}
