@@ -126,7 +126,16 @@ function location(){
 
 // #region 天气数据获取
 function weather() {
-    location();
+    if(config.lat_lon ===""){
+        location();
+    }else {
+        support();
+        heweatherNow();
+        heweatherDaily();
+        darksky();
+        aqicn();
+        heweatherLifestyle();
+    }
 }
 //clear-day, partly-cloudy-day, cloudy, clear-night, rain, snow, sleet, wind, fog, or partly-cloudy-night
 //☀️🌤⛅️🌥☁️🌦🌧⛈🌩🌨❄️💧💦🌫☔️☂️ ☃️⛄️
