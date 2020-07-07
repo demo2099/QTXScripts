@@ -6,11 +6,12 @@ author:demo
 const $ = API("APP"); // Env("APP", false) --> 无log输出
 let scheme = 'https://news.qq.com/FERD/cjRedDown.htm';
 let sign = 'https://gh.prize.qq.com/show/_4cykzqnif2y/owhat-owhat/index.html';
-    let content = "签到红包👉"+scheme+"全勤签到👉"+sign;
+    
  $.notify( "腾讯新闻红包每日签到","",
- content);
+ "签到红包👉"+scheme);
 
-
+ $.notify( "腾讯新闻全勤签到","",
+ "全勤签到👉"+sign);
 $.done();
 
 // prettier-ignore
