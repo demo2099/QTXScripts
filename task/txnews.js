@@ -36,12 +36,12 @@ hostname = api.inews.qq.com
 Cookie获取后，请注释掉Cookie地址。
 #腾讯新闻app签到，根据红鲤鱼与绿鲤鱼与驴修改
 */
-const notify = 1; //开启通知为1，关闭为0
+const notify = 0; //开启通知为1，关闭为0
 const logs = 1; // 日志开关
 const cookieName = '腾讯新闻'
-const signurlKey = 'sy_signurl_txnew8'
-const cookieKey = 'sy_cookie_txnew8'
-const RedIDKey = 'sy_rd_txnew8'
+const signurlKey = 'sy_signurl_txnew17'
+const cookieKey = 'sy_cookie_txnew17'
+const RedIDKey = 'sy_rd_txnew17'
 const sy = init()
 const signurlVal = sy.getdata(signurlKey)
 const cookieVal = sy.getdata(cookieKey)
