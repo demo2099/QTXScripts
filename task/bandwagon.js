@@ -97,7 +97,7 @@ function parse_flow(data) {
     var msg3 = "本月: " + days + "天, 重置: " + reset_date;
     var message = msg1 + "\n" + msg2 + "\n" + msg3;
 
-    $.notify("搬瓦工流量查询", subTitle, message);
+    $.notify("搬瓦工流量"+data.node_datacenter, subTitle, message);
     $.log(subTitle);
     $.log(message);
 }
