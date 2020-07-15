@@ -3,10 +3,14 @@ const $ = API("bandwagon", false); // API("APP") --> 无log输出
 
 gitvalue();
 function gitvalue(){
-    const veidarry = $.read("veids").toString().split(",");
-    const api_keyarry = $.read("api_keys").toString().split(",");
-    for(var i=0;i<veidarry.length;i++){
-        check_flow(parseInt(veidarry[i]),api_keyarry[i]);
+    if ($.read("veids") !== undefined && $.read("api_keys") !== undefined) {
+        const veidarry = $.read("veids").toString().split(",");
+        const api_keyarry = $.read("api_keys").toString().split(",");
+        for(var i=0;i<veidarry.length;i++){
+            check_flow(parseInt(veidarry[i]),api_keyarry[i]);
+        }
+    }else {
+        console.log("no data")
     }
 }
 $.done();
