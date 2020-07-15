@@ -1,0 +1,43 @@
+{
+  "id":"demo2099.app.sub",
+  "name":"demo2099 应用订阅",
+  "author":"@demo2099",
+  "icon":"https://avatars2.githubusercontent.com/u/21050064?s=460&amp;u=40a74913dd0a3d00670d05148c3a08c787470021&amp;v=4",
+  "repo":"https://github.com/demo2099/QTXScripts",
+  "apps":[
+    {
+      "id":"bandwagon",
+      "name":"bandwagon服务器流量查询",
+      "keys":[
+        "@bandwagon.veids",
+        "@bandwagon.api_keys"
+      ],
+      "settings":[
+        {
+          "id":"@bandwagon.veids",
+          "name":"服务器的veid",
+          "val":"12345454545",
+          "type":"textarea",
+          "autoGrow":false,
+          "rows":2,
+          "desc":"多个服务器请用英文逗号,如'123456,789456'分割。"
+        },
+        {
+          "id":"@bandwagon.api_keys",
+          "name":"服务器的apikey",
+          "val":"rivate_d1v9PNnWrl47r7AtbwFADa",
+          "type":"textarea",
+          "autoGrow":false,
+          "rows":2,
+          "desc":"多个服务器请用英文逗号,如'123456,789456'分割。"
+        }
+      ],
+      "author":"@demo2099",
+      "repo":"https://github.com/demo2099/QTXScripts",
+      "icons":[
+        "https://raw.githubusercontent.com/Orz-3/mini/master/tgpic.png",
+        "https://raw.githubusercontent.com/Orz-3/task/master/tgpic.png"
+      ]
+    }
+  ]
+}
