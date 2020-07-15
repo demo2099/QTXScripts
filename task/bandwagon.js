@@ -1,5 +1,5 @@
 
-const $ = API("APP", false); // API("APP") --> 无log输出
+const $ = API("bandwagon", false); // API("APP") --> 无log输出
 
 gitvalue();
 function gitvalue(){
