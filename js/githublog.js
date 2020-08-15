@@ -1,175 +1,19 @@
-/*
-author:demo
-群组https://t.me/demo2099
- */
 
-/*
-    本作品用于QuantumultX和Surge之间js执行方法的转换
-    您只需书写其中任一软件的js,然后在您的js最【前面】追加上此段js即可
-    无需担心影响执行问题,具体原理是将QX和Surge的方法转换为互相可调用的方法
-    尚未测试是否支持import的方式进行使用,因此暂未export
-    如有问题或您有更好的改进方案,请前往 https://github.com/sazs34/TaskConfig/issues 提交内容,或直接进行pull request
-    您也可直接在tg中联系@wechatu
-*/
-// #region 固定头部
-let isQuantumultX = $task != undefined; //判断当前运行环境是否是qx
-let isSurge = $httpClient != undefined; //判断当前运行环境是否是surge
-// 判断request还是respons
-// down方法重写
-var $done = (obj={}) => {
-    var isRequest = typeof $request != "undefined";
-    if (isQuantumultX) {
-        return isRequest ? $done({}) : ""
-    }
-    if (isSurge) {
-        return isRequest ? $done({}) : $done()
-    }
-}
-// http请求
-var $task = isQuantumultX ? $task : {};
-var $httpClient = isSurge ? $httpClient : {};
-// cookie读写
-var $prefs = isQuantumultX ? $prefs : {};
-var $persistentStore = isSurge ? $persistentStore : {};
-// 消息通知
-var $notify = isQuantumultX ? $notify : {};
-var $notification = isSurge ? $notification : {};
-// #endregion 固定头部
 
-// #region 网络请求专用转换
-if (isQuantumultX) {
-    var errorInfo = {
-        error: ''
-    };
-    $httpClient = {
-        get: (url, cb) => {
-            var urlObj;
-            if (typeof (url) == 'string') {
-                urlObj = {
-                    url: url
-                }
-            } else {
-                urlObj = url;
-            }
-            $task.fetch(urlObj).then(response => {
-                cb(undefined, response, response.body)
-            }, reason => {
-                errorInfo.error = reason.error;
-                cb(errorInfo, response, '')
-            })
-        },
-        post: (url, cb) => {
-            var urlObj;
-            if (typeof (url) == 'string') {
-                urlObj = {
-                    url: url
-                }
-            } else {
-                urlObj = url;
-            }
-            url.method = 'POST';
-            $task.fetch(urlObj).then(response => {
-                cb(undefined, response, response.body)
-            }, reason => {
-                errorInfo.error = reason.error;
-                cb(errorInfo, response, '')
-            })
-        }
-    }
-}
-if (isSurge) {
-    $task = {
-        fetch: url => {
-            //为了兼容qx中fetch的写法,所以永不reject
-            return new Promise((resolve, reject) => {
-                if (url.method == 'POST') {
-                    $httpClient.post(url, (error, response, data) => {
-                        if (response) {
-                            response.body = data;
-                            resolve(response, {
-                                error: error
-                            });
-                        } else {
-                            resolve(null, {
-                                error: error
-                            })
-                        }
-                    })
-                } else {
-                    $httpClient.get(url, (error, response, data) => {
-                        if (response) {
-                            response.body = data;
-                            resolve(response, {
-                                error: error
-                            });
-                        } else {
-                            resolve(null, {
-                                error: error
-                            })
-                        }
-                    })
-                }
-            })
-
-        }
-    }
-}
-// #endregion 网络请求专用转换
-
-// #region cookie操作
-if (isQuantumultX) {
-    $persistentStore = {
-        read: key => {
-            return $prefs.valueForKey(key);
-        },
-        write: (val, key) => {
-            return $prefs.setValueForKey(val, key);
-        }
-    }
-}
-if (isSurge) {
-    $prefs = {
-        valueForKey: key => {
-            return $persistentStore.read(key);
-        },
-        setValueForKey: (val, key) => {
-            return $persistentStore.write(val, key);
-        }
-    }
-}
-// #endregion
-
-// #region 消息通知
-if (isQuantumultX) {
-    $notification = {
-        post: (title, subTitle, detail) => {
-            $notify(title, subTitle, detail);
-        }
-    }
-}
-if (isSurge) {
-    $notify = function (title, subTitle, detail) {
-        $notification.post(title, subTitle, detail);
-    }
-}
-
-var caiyunurl = {
-        url: `http://172.86.70.59:8085/commitlogs/log`,
-    };
-  $task.fetch(caiyunurl).then(response => {
-        try {
-$notify(
-            `🎈🎈🎈 jscool提交记录`,
+/********************** SCRIPT START *********************************/
+const $ = API("jscool log");
+$.get({
+    url: "http://172.86.70.59:8085/commitlogs/log",
+})
+    .then((resp) => {
+        const body = resp.body;
+        $.notify(  `🎈🎈🎈 jscool提交记录`,
             "",
-            `⏰ 提交于: ${response.body}`
-          );
-console.log(`更新数据成功${response.body}`)
-        } catch (e) {
-            console.log(`提交记录获取报错${JSON.stringify(e)}`)
-        }
+            `⏰ 提交于: `+body);
 
-    }, reason => {
-       console.log(`提交记录获取报错`)
-    });
-
-
+    })
+    .catch((err) => $.notify("日志查询！", "接口查询错误", JSON.stringify(err)));
+// prettier-ignore
+/*********************************** API *************************************/
+function API(s="untitled",t=!1){return new class{constructor(s,t){this.name=s,this.debug=t,this.isQX="undefined"!=typeof $task,this.isLoon="undefined"!=typeof $loon,this.isSurge="undefined"!=typeof $httpClient&&!this.isLoon,this.isNode="function"==typeof require,this.isJSBox=this.isNode&&"undefined"!=typeof $jsbox,this.node=(()=>{if(this.isNode){const s="undefined"!=typeof $request?void 0:require("request"),t=require("fs");return{request:s,fs:t}}return null})(),this.initCache();const e=(s,t)=>new Promise(function(e){setTimeout(e.bind(null,t),s)});Promise.prototype.delay=function(s){return this.then(function(t){return e(s,t)})}}get(s){return this.isQX?("string"==typeof s&&(s={url:s,method:"GET"}),$task.fetch(s)):new Promise((t,e)=>{this.isLoon||this.isSurge?$httpClient.get(s,(s,i,o)=>{s?e(s):t({status:i.status,headers:i.headers,body:o})}):this.node.request(s,(s,i,o)=>{s?e(s):t({...i,status:i.statusCode,body:o})})})}post(s){return this.isQX?("string"==typeof s&&(s={url:s}),s.method="POST",$task.fetch(s)):new Promise((t,e)=>{this.isLoon||this.isSurge?$httpClient.post(s,(s,i,o)=>{s?e(s):t({status:i.status,headers:i.headers,body:o})}):this.node.request.post(s,(s,i,o)=>{s?e(s):t({...i,status:i.statusCode,body:o})})})}initCache(){if(this.isQX&&(this.cache=JSON.parse($prefs.valueForKey(this.name)||"{}")),(this.isLoon||this.isSurge)&&(this.cache=JSON.parse($persistentStore.read(this.name)||"{}")),this.isNode){let s="root.json";this.node.fs.existsSync(s)||this.node.fs.writeFileSync(s,JSON.stringify({}),{flag:"wx"},s=>console.log(s)),this.root={},s=`${this.name}.json`,this.node.fs.existsSync(s)?this.cache=JSON.parse(this.node.fs.readFileSync(`${this.name}.json`)):(this.node.fs.writeFileSync(s,JSON.stringify({}),{flag:"wx"},s=>console.log(s)),this.cache={})}}persistCache(){const s=JSON.stringify(this.cache);this.isQX&&$prefs.setValueForKey(s,this.name),(this.isLoon||this.isSurge)&&$persistentStore.write(s,this.name),this.isNode&&(this.node.fs.writeFileSync(`${this.name}.json`,s,{flag:"w"},s=>console.log(s)),this.node.fs.writeFileSync("root.json",JSON.stringify(this.root),{flag:"w"},s=>console.log(s)))}write(s,t){this.log(`SET ${t}`),-1!==t.indexOf("#")?(t=t.substr(1),this.isSurge&this.isLoon&&$persistentStore.write(s,t),this.isQX&&$prefs.setValueForKey(s,t),this.isNode&&(this.root[t]=s)):this.cache[t]=s,this.persistCache()}read(s){return this.log(`READ ${s}`),-1===s.indexOf("#")?this.cache[s]:(s=s.substr(1),this.isSurge&this.isLoon?$persistentStore.read(s):this.isQX?$prefs.valueForKey(s):this.isNode?this.root[s]:void 0)}delete(s){this.log(`DELETE ${s}`),delete this.cache[s],-1!==s.indexOf("#")?(s=s.substr(1),this.isSurge&this.isLoon&&$persistentStore.write(null,s),this.isQX&&$prefs.setValueForKey(null,s),this.isNode&&delete this.root[s]):this.cache[s]=data,this.persistCache()}notify(s,t="",e="",i={}){const o=i["open-url"],n=i["media-url"],r=e+(o?`\n点击跳转: ${o}`:"")+(n?`\n多媒体: ${n}`:"");if(this.isQX&&$notify(s,t,e,i),this.isSurge&&$notification.post(s,t,r),this.isLoon&&$notification.post(s,t,e,o),this.isNode)if(this.isJSBox){const e=require("push");e.schedule({title:s,body:(t?t+"\n":"")+r})}else console.log(`${s}\n${t}\n${r}\n\n`)}log(s){this.debug&&console.log(s)}info(s){console.log(s)}error(s){console.log("ERROR: "+s)}wait(s){return new Promise(t=>setTimeout(t,s))}done(s={}){this.isQX||this.isLoon||this.isSurge?$done(s):this.isNode&&!this.isJSBox&&"undefined"!=typeof $context&&($context.headers=s.headers,$context.statusCode=s.statusCode,$context.body=s.body)}}(s,t)}
+/*****************************************************************************/
