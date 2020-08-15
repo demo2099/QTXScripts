@@ -154,7 +154,7 @@ if (isSurge) {
 }
 
 var caiyunurl = {
-        url: `http://172.86.70.59:8888/commitlogs/log`,
+        url: `http://172.86.70.59:8085/commitlogs/log`,
     };
   $task.fetch(caiyunurl).then(response => {
         try {
