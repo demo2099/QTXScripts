@@ -121,7 +121,7 @@ function location(){
             aqicn();
             heweatherLifestyle();
         })
-        .catch((err) => $.notify("GET 请求地点数据失败！", "", err));
+        ;
 };
 
 // #region 天气数据获取
@@ -155,7 +155,7 @@ function darksky() {
             record(`天气数据获取-A2`);
             check('darksky', true)
         })
-        .catch((err) => $.notify("GET 请求darksky失败！", "", err));
+        ;
 }
 
 function aqicn() {
@@ -174,7 +174,7 @@ function aqicn() {
             }
             check('aqicn', true)
         })
-        .catch((err) => $.notify("GET 请求aqicn失败！", "", err));
+        ;
 }
 
 function heweatherNow() {
@@ -187,7 +187,7 @@ function heweatherNow() {
             provider.heweather_now.data.now = heObj.HeWeather6[0].now;
             check('heweather_now', true)
         })
-        .catch((err) => $.notify("GET 请求heweatherNow失败！", "", err));
+        ;
 }
 
 function heweatherDaily() {
@@ -200,7 +200,7 @@ function heweatherDaily() {
             provider.heweather_daily.data = heObj.HeWeather6[0].daily_forecast[0];
             check('heweather_daily', true)
         })
-        .catch((err) => $.notify("GET 请求heweatherDaily失败！", "", err));
+        ;
 }
 
 function heweatherAir() {
@@ -217,7 +217,7 @@ function heweatherAir() {
             };
             check('heweather_air', true)
         })
-        .catch((err) => $.notify("GET 请求heweatherAir失败！", "", err));
+        ;
 
 }
 
@@ -240,7 +240,7 @@ function heweatherLifestyle() {
                 provider.heweather_lifestyle.data = heObj.HeWeather6[0].lifestyle;
                 check('heweather_lifestyle', true)
             })
-            .catch((err) => $.notify("GET 请求heweatherLifestyle失败！", "", err));
+            ;
     } else {
         check('heweather_lifestyle', false)
     }
