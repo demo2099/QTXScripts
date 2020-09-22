@@ -3,7 +3,10 @@ author:demo
 群组https://t.me/demo2099
 https://api.cercube.com/v2/user
  */
-
+let url=$request.url;
+if(url.endsWith("access_token")) {
+	$done({});
+}else{
 var body = $response.body;
 body={
   "id" : 386641,
@@ -26,3 +29,4 @@ body = JSON.stringify(obj);
 $done({
     body
 });
+}
