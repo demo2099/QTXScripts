@@ -4,9 +4,8 @@ author:demo
 https://api.cercube.com/v2/user
  */
 let url=$request.url;
-if(url.endsWith("access_token")) {
-	$done({});
-}else{
+if(!url.endsWith("access_token")) {
+
 var body = $response.body;
 body={
   "id" : 386641,
