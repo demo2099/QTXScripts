@@ -3,10 +3,15 @@ author:demo
 群组https://t.me/demo2099
 https://api.cercube.com/v2/user
  */
+ var body = $response.body;
 let url=$request.url;
-if(!url.endsWith("access_token")) {
+if(url.endsWith("access_token")) {
+$done({
+    body
+});
+}else{
 
-var body = $response.body;
+
 body={
   "id" : 386641,
   "updatedAt" : "2020-04-08T07:55:03.413Z",
