@@ -5,7 +5,7 @@ https://api.cercube.com/v2/user
  */
  var body = $response.body;
 let url=$request.url;
-if(url.endsWith("access_token")) {
+if(url.endsWith("access_token")||url.endsWith("login")) {
 $done({
     body
 });
