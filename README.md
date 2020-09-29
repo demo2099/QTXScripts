@@ -2,7 +2,7 @@ QuantumultX
 
 
 
-脚本本地化配置:
+脚本本地化配置:只更新远程订阅
 
 1⃣️在本地建立文件夹 目录 iCloud Drive/QuantumultX/Scripts/demo 或者 我的iPhone/QuantumultX/Scripts/demo
 
