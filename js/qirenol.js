@@ -5,7 +5,7 @@ https://api.cercube.com/v2/user
  */
  var body = $response.body;
 let url=$request.url;
-if($request.url.indexOf("user/info") != -1){
+if($request.url.indexOf("user/info") != -1 || $request.url.indexOf("login/phone_login") != -1){
 body=body.replace(/type\":\"\d/g,'type":"4').replace(/vip_expire\":\"\d+/g,'vip_expire":"5201314007');
 var body = JSON.parse(body); 
 body.data.info.avatar="https://s1.ax1x.com/2020/09/20/w7lOEQ.gif";
