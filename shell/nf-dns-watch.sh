@@ -22,6 +22,7 @@
 #   nf-dns-watch.sh run              检测一次（cron 调用入口）
 #   nf-dns-watch.sh force            无论 Netflix 状态都强制测速并换 DNS
 #   nf-dns-watch.sh test-speed       只测速看结果，不改任何系统配置
+#   nf-dns-watch.sh test-notify      发送一条测试通知，验证推送配置
 #   nf-dns-watch.sh install-cron 5   安装定时任务（每 5 分钟，参数可改分钟数）
 #   nf-dns-watch.sh uninstall-cron   移除定时任务
 #   nf-dns-watch.sh restore          从最近一次备份还原 resolv.conf
@@ -51,6 +52,14 @@ TIMEOUT=1                        # 单次查询超时（秒）
 LOCK_RESOLV_CONF=1               # 应用后 chattr +i 锁定，防 dhcp/udhcpc 覆盖
 RESTORE_ON_ALL_FAIL=1            # 所有节点都无法解锁时，还原原始 DNS（0=保留最后测试的节点）
 
+# ---- 通知（Bark）----
+# 留空 = 不发送通知。请在 /etc/nf-dns-watch.conf 中配置，避免把 key 提交到公开仓库。
+# 格式示例：https://your-bark-host/YOUR_KEY/title/body?group=example&ttl=600
+NOTIFY_URL=""
+NOTIFY_ENABLED=1
+NOTIFY_REPEAT_INTERVAL=18000     # 持续失败时的重复通知间隔（秒），默认 5 小时
+STATE_FILE="/var/lib/nf-dns-watch/state"
+
 # Netflix 解锁判定用的浏览器 UA（Netflix 会拦截默认 curl UA）
 NF_UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
@@ -77,6 +86,9 @@ DNS_LIST="
 #   COUNT=3
 #   TIMEOUT=2
 #   LOCK_RESOLV_CONF=0
+#   NOTIFY_URL="https://your-bark-host/YOUR_KEY/title/body?group=example&ttl=600"
+#   NOTIFY_REPEAT_INTERVAL=18000                        # 失败重复通知间隔（秒）
+# 注意：NOTIFY_URL 含推送密钥，务必只写在配置文件里（chmod 600），不要提交到仓库。
 CONF_FILE="${NF_DNS_CONF:-/etc/nf-dns-watch.conf}"
 if [ -f "$CONF_FILE" ]; then
   # shellcheck source=/dev/null
@@ -104,6 +116,90 @@ need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     log "[错误] 缺少命令: $1，请先安装: apk add $2"
     return 1
+  fi
+  return 0
+}
+
+# ============================================================
+# 通知（Bark 兼容接口）
+# 支持两种地址写法：
+#   1) https://host/KEY/title/body?group=xx&ttl=600   （GET 风格，自动转成 POST JSON）
+#   2) https://host/KEY                              （直接 POST JSON）
+# 用 POST JSON 而非拼路径，避免中文标题需要 URL 编码的问题
+# ============================================================
+send_notify() {
+  n_title="$1"
+  n_body="$2"
+
+  [ "$NOTIFY_ENABLED" = "1" ] || return 0
+  [ -n "${NOTIFY_URL:-}" ] || { log "[通知] 未配置 NOTIFY_URL，跳过"; return 0; }
+  need_cmd curl curl || return 0
+
+  # 去掉 /title/body 及其后的查询串，得到 Bark 的 KEY 端点
+  n_base=$(printf '%s' "$NOTIFY_URL" | sed 's#/title/body.*##')
+  n_group=$(printf '%s' "$NOTIFY_URL" | sed -n 's/.*[?&]group=\([^&]*\).*/\1/p')
+  n_ttl=$(printf '%s' "$NOTIFY_URL" | sed -n 's/.*[?&]ttl=\([0-9]*\).*/\1/p')
+  [ -n "$n_group" ] || n_group="nf-dns-watch"
+  [ -n "$n_ttl" ] || n_ttl=600
+
+  n_payload=$(printf '{"title":"%s","body":"%s","group":"%s","ttl":%s}' \
+    "$n_title" "$n_body" "$n_group" "$n_ttl")
+
+  n_resp=$(curl -s -X POST "$n_base" -H 'Content-Type: application/json; charset=utf-8' \
+    -d "$n_payload" --connect-timeout 8 --max-time 15 2>/dev/null)
+
+  case "$n_resp" in
+    *'"code":200'*|*'"code": 200'*)
+      log "[通知] 已发送: $n_title"
+      ;;
+    *)
+      log "[通知] 发送失败: ${n_resp:-无响应}"
+      ;;
+  esac
+  return 0
+}
+
+# ============================================================
+# 状态记忆：避免重复通知
+# 文件内容：STATE_STATUS=ok|fail / STATE_LAST_NOTIFY=<epoch>
+# ============================================================
+read_state() {
+  STATE_STATUS="ok"
+  STATE_LAST_NOTIFY=0
+  if [ -f "$STATE_FILE" ]; then
+    # shellcheck source=/dev/null
+    . "$STATE_FILE" 2>/dev/null || true
+  fi
+  STATE_STATUS="${STATE_STATUS:-ok}"
+  STATE_LAST_NOTIFY="${STATE_LAST_NOTIFY:-0}"
+}
+
+save_state() {
+  mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || true
+  printf 'STATE_STATUS=%s\nSTATE_LAST_NOTIFY=%s\n' "$1" "${2:-0}" > "$STATE_FILE" 2>/dev/null || true
+}
+
+# 失败通知（带去重）：
+#   · 首次失败 → 立即通知
+#   · 持续失败 → 每 NOTIFY_REPEAT_INTERVAL（默认 5 小时）才再通知一次
+#   · 恢复正常 → 由调用方发一次"已恢复"，并把状态复位
+notify_all_fail() {
+  reason="$1"
+  now=$(date +%s)
+
+  if [ "$STATE_STATUS" != "fail" ]; then
+    send_notify "Netflix 解锁失败" "$reason。已还原原始 DNS，请到控制台检查解锁配置"
+    save_state fail "$now"
+    return 0
+  fi
+
+  elapsed=$((now - STATE_LAST_NOTIFY))
+  if [ "$elapsed" -ge "$NOTIFY_REPEAT_INTERVAL" ]; then
+    hours=$((elapsed / 3600))
+    send_notify "Netflix 仍未解锁" "$reason。已持续约 ${hours} 小时未解锁，请尽快处理"
+    save_state fail "$now"
+  else
+    log "[通知] 仍处于失败状态，距上次通知 $((elapsed / 60)) 分钟，未满 $((NOTIFY_REPEAT_INTERVAL / 3600)) 小时，本次不重复通知"
   fi
   return 0
 }
@@ -376,7 +472,16 @@ run_once() {
   need_cmd curl curl || exit 1
   need_cmd dig bind-tools || exit 1
 
+  read_state
+
+  # 分支一：当前已解锁
   if [ "$force" = "0" ] && check_netflix; then
+    if [ "$STATE_STATUS" = "fail" ]; then
+      cur_dns=$(grep -E '^nameserver' /etc/resolv.conf 2>/dev/null | awk '{print $2}' | tr '\n' ' ')
+      log "[通知] 状态由失败恢复正常"
+      send_notify "Netflix 解锁已恢复" "解锁已恢复，当前 DNS: ${cur_dns:-未知}"
+      save_state ok 0
+    fi
     exit 0
   fi
 
@@ -392,6 +497,7 @@ run_once() {
     print_ranking "$rank_file"
     rm -f "$rank_file"
     log "[流程] 所有节点不可达，本次放弃"
+    notify_all_fail "所有 AKDNS 节点均不可达（测速全部超时），无法切换 DNS"
     exit 1
   fi
   print_ranking "$rank_file"
@@ -427,6 +533,11 @@ run_once() {
 
   if [ -n "$applied" ]; then
     log "[完成] 已切换到 $applied，Netflix 解锁成功 ✓"
+    if [ "$STATE_STATUS" = "fail" ]; then
+      log "[通知] 状态由失败恢复正常"
+      send_notify "Netflix 解锁已恢复" "已切换到 $applied，Netflix 解锁恢复"
+    fi
+    save_state ok 0
     exit 0
   fi
 
@@ -438,6 +549,7 @@ run_once() {
     log "[完成] 所有节点均无法解锁，保留最后测试的节点"
   fi
   log "[提示] 请到控制台为本机 IP 勾选解锁服务: $CONSOLE_URL"
+  notify_all_fail "已测试全部 $(echo "$DNS_LIST" | wc -w) 个节点，均无法解锁 Netflix"
   exit 2
 }
 
@@ -460,6 +572,20 @@ show_status() {
   fi
   echo ""
   check_netflix || true
+  echo ""
+  read_state
+  if [ -n "${NOTIFY_URL:-}" ]; then
+    masked=$(printf '%s' "$NOTIFY_URL" | sed 's#\(/[^/]\{4\}\)[^/]*#\1***#')
+    echo "通知: 已启用 ($masked)"
+    if [ "$STATE_LAST_NOTIFY" -gt 0 ]; then
+      echo "  状态记忆: $STATE_STATUS (上次通知于 $(( ($(date +%s) - STATE_LAST_NOTIFY) / 60 )) 分钟前)"
+    else
+      echo "  状态记忆: $STATE_STATUS (尚未发送过通知)"
+    fi
+    echo "  失败重复间隔: $((NOTIFY_REPEAT_INTERVAL / 3600)) 小时"
+  else
+    echo "通知: 未配置（在 $CONF_FILE 中设置 NOTIFY_URL）"
+  fi
   echo ""
   echo "定时任务:"
   crontab -l 2>/dev/null | grep -F "$0" || echo "  (未安装)"
@@ -546,11 +672,23 @@ test_speed() {
   echo "（仅测速，未修改 /etc/resolv.conf）"
 }
 
+# 测试通知通道是否可用
+test_notify() {
+  if [ -z "${NOTIFY_URL:-}" ]; then
+    echo "未配置 NOTIFY_URL，请在 $CONF_FILE 中设置，例如："
+    echo 'NOTIFY_URL="https://your-bark-host/YOUR_KEY/title/body?group=example&ttl=600"'
+    exit 1
+  fi
+  echo "正在向通知接口发送测试消息..."
+  send_notify "nf-dns-watch 测试" "如果你收到这条消息，说明通知配置正确"
+}
+
 # ============================================================
 case "${1:-run}" in
   run)            run_once 0 ;;
   force)          run_once 1 ;;
   test-speed)     test_speed ;;
+  test-notify|notify-test) test_notify ;;
   restore)        restore_dns ;;
   status)         show_status ;;
   install-cron)   install_cron "${2:-5}" ;;

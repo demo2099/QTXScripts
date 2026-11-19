@@ -21,6 +21,39 @@ Netflix 解锁守护脚本：定时检测 Netflix 解锁状态，未解锁时自
 **以解锁为目标，不是以延迟最低为目标。** 延迟只用于决定尝试顺序：
 先试最快的，能解锁就停；不能解锁就按延迟顺序继续试，直到找到能解锁的节点。
 
+## 通知（可选）
+
+全部节点都无法解锁时推送通知，并做了去重，避免刷屏：
+
+- **首次失败** → 立即通知一次
+- **持续失败** → 每 `NOTIFY_REPEAT_INTERVAL`（默认 5 小时）才再通知一次
+- **恢复正常** → 通知一次，状态复位
+- **一直正常** → 不发送任何通知
+
+配置写在 `/etc/nf-dns-watch.conf`（**不要写进脚本**，密钥会随公开仓库泄露）：
+
+```sh
+chmod 600 /etc/nf-dns-watch.conf
+cat > /etc/nf-dns-watch.conf <<'EOF'
+NOTIFY_URL="https://your-bark-host/YOUR_KEY/title/body?group=example&ttl=600"
+NOTIFY_REPEAT_INTERVAL=18000
+EOF
+
+nf-dns-watch.sh test-notify     # 发一条测试通知验证
+```
+
+脚本会把 `/title/body` 去掉得到 KEY 端点，改用 **POST JSON** 提交（`{"title","body","group","ttl"}`），
+这样中文标题不需要 URL 编码。
+
+状态保存在 `/var/lib/nf-dns-watch/state`：
+
+```
+STATE_STATUS=ok|fail
+STATE_LAST_NOTIFY=<epoch>
+```
+
+删除该文件可重置通知状态（下次失败会立即通知）。
+
 ## 安装
 
 ```sh
@@ -37,6 +70,7 @@ nf-dns-watch.sh install-cron 5     # 每 5 分钟检测一次
 | `nf-dns-watch.sh run` | 检测一次（cron 调用入口） |
 | `nf-dns-watch.sh force` | 跳过检测，强制测速并切换 DNS |
 | `nf-dns-watch.sh test-speed` | 只测速看结果，不改任何配置 |
+| `nf-dns-watch.sh test-notify` | 发送一条测试通知 |
 | `nf-dns-watch.sh status` | 查看当前 DNS / Netflix / 定时任务状态 |
 | `nf-dns-watch.sh restore` | 从最近一次备份还原 DNS |
 | `nf-dns-watch.sh install-cron N` | 安装定时任务，每 N 分钟（1-59） |
