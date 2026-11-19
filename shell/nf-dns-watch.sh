@@ -3,13 +3,17 @@
 # nf-dns-watch.sh v1.0 - Netflix 解锁守护 + AKDNS 自动切换
 # 适用于 Alpine 3.21（BusyBox ash / OpenRC / musl libc）
 #
-# 逻辑整理自 akdns.sh v3.0.0（菜单 4「一键测速并应用」）：
+# 目标：以「Netflix 能解锁」为第一优先，延迟只作为同条件下的择优依据。
+# 测速与切换逻辑整理自 akdns.sh v3.0.0（菜单 4「一键测速并应用」）：
 #   检测 Netflix 是否解锁
 #     ├─ 已解锁 → 记录日志，退出
-#     └─ 未解锁 → dig 测速所有 AKDNS 节点（UDP，全超时自动回退 TCP）
-#                 → 选出延迟最低节点
-#                 → 备份并接管 /etc/resolv.conf（chattr +i 锁定防覆盖）
-#                 → 验证系统解析 → 复测 Netflix
+#     └─ 未解锁 → dig 并行测速所有 AKDNS 节点（UDP，全超时自动回退 TCP）
+#                 → 按延迟升序排序
+#                 → 依次切换候选节点并实测解锁：
+#                     切换 → 验证解析 → 复测 Netflix
+#                     能解锁即停（此时也一定是能解锁的节点里最快的）
+#                     不能解锁 → 试下一个
+#                 → 全部失败则还原原始 DNS 并提示控制台配置
 #
 # 依赖（Alpine 3.21）:
 #   apk add curl bind-tools
@@ -45,6 +49,7 @@ DOMAIN="www.google.com"          # 测速用域名
 COUNT=5                          # 每个节点测速次数
 TIMEOUT=1                        # 单次查询超时（秒）
 LOCK_RESOLV_CONF=1               # 应用后 chattr +i 锁定，防 dhcp/udhcpc 覆盖
+RESTORE_ON_ALL_FAIL=1            # 所有节点都无法解锁时，还原原始 DNS（0=保留最后测试的节点）
 
 # Netflix 解锁判定用的浏览器 UA（Netflix 会拦截默认 curl UA）
 NF_UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
@@ -176,11 +181,10 @@ load_dns_list() {
   fi
 }
 
-# 测速选最优：UDP 优先，全部超时自动回退 TCP（移植自 akdns.sh run_speed_test）
-find_best_dns() {
-  need_cmd dig bind-tools || return 1
-  load_dns_list
-  BEST_DNS=""
+# 测速并按延迟升序排序，结果写入 $1（每行 "平均耗时 IP"）
+# 注意：在调用者 shell 内执行（不放进命令替换），DNS_USE_TCP 才能生效
+rank_dns() {
+  out_file="$1"
   DNS_USE_TCP=0
 
   log "[测速] UDP 模式测速中 (域名: $DOMAIN, 每节点 ${COUNT} 次, 超时 ${TIMEOUT}s)..."
@@ -200,24 +204,42 @@ find_best_dns() {
     fi
   fi
 
-  echo "$result" | while read -r avg dns; do
+  printf '%s\n' "$result" > "$out_file"
+  [ -n "$result" ] || return 1
+  best_avg=$(head -n1 "$out_file" | awk '{print $1}')
+  [ "${best_avg:-1000}" -lt 1000 ] || return 1
+  return 0
+}
+
+# 打印排序结果
+print_ranking() {
+  while read -r avg dns; do
+    [ -n "$dns" ] || continue
     if [ "$avg" -ge 1000 ]; then
       log "[测速]   $dns  超时"
     else
       log "[测速]   $dns  ${avg}ms"
     fi
-  done
+  done < "$1"
+}
 
-  best_avg=$(echo "$result" | head -n1 | awk '{print $1}')
-  best_dns=$(echo "$result" | head -n1 | awk '{print $2}')
-
-  if [ -z "$best_dns" ] || [ "${best_avg:-1000}" -ge 1000 ]; then
+# 测速选最优（仅 test-speed 命令使用；run 流程用 rank_dns + 逐个解锁测试）
+find_best_dns() {
+  need_cmd dig bind-tools || return 1
+  load_dns_list
+  BEST_DNS=""
+  f=$(mktemp) || return 1
+  if ! rank_dns "$f"; then
+    print_ranking "$f"
+    rm -f "$f"
     log "[测速] 所有 AKDNS 节点 UDP/TCP 均超时"
     return 1
   fi
-
-  BEST_DNS="$best_dns"
-  log "[测速] 最优节点: $BEST_DNS (${best_avg}ms$( [ "$DNS_USE_TCP" = "1" ] && echo ", TCP" ))"
+  print_ranking "$f"
+  BEST_DNS=$(head -n1 "$f" | awk '{print $2}')
+  best_avg=$(head -n1 "$f" | awk '{print $1}')
+  rm -f "$f"
+  log "[测速] 延迟最低节点: $BEST_DNS (${best_avg}ms$( [ "$DNS_USE_TCP" = "1" ] && echo ", TCP" ))"
   return 0
 }
 
@@ -302,20 +324,22 @@ apply_dns() {
 # ============================================================
 verify_dns() {
   sleep 1
-  if [ "$DNS_USE_TCP" = "1" ]; then
-    # musl 忽略 use-vc，用 dig +tcp 显式验证 TCP 链路
-    if dig +tcp +time=3 +tries=1 "$DOMAIN" >/dev/null 2>&1; then
-      log "[验证] DNS 解析正常 (TCP)"
-      return 0
-    fi
-  else
-    if dig +time=3 +tries=1 "$DOMAIN" >/dev/null 2>&1; then
-      log "[验证] DNS 解析正常"
-      return 0
-    fi
+  if verify_dns_quick; then
+    log "[验证] DNS 解析正常$( [ "$DNS_USE_TCP" = "1" ] && echo " (TCP)" )"
+    return 0
   fi
   log "[验证] DNS 解析验证失败（可能仍生效，或网络异常）"
   return 1
+}
+
+# 静默版验证：逐个候选测试时使用，避免刷屏
+verify_dns_quick() {
+  if [ "$DNS_USE_TCP" = "1" ]; then
+    # musl 忽略 use-vc，用 dig +tcp 显式验证 TCP 链路
+    dig +tcp +time=3 +tries=1 "$DOMAIN" >/dev/null 2>&1
+  else
+    dig +time=3 +tries=1 "$DOMAIN" >/dev/null 2>&1
+  fi
 }
 
 # ============================================================
@@ -357,30 +381,64 @@ run_once() {
   fi
 
   if [ "$force" = "1" ]; then
-    log "[流程] 强制模式：跳过 Netflix 检测，直接测速切换"
+    log "[流程] 强制模式：跳过 Netflix 检测，直接进入节点解锁测试"
   else
-    log "[流程] Netflix 未解锁，开始 DNS 测速并切换..."
+    log "[流程] Netflix 未解锁，按延迟顺序逐个测试节点能否解锁"
   fi
 
-  find_best_dns || { log "[流程] 无可达 AKDNS 节点，本次放弃"; exit 1; }
-  backup_resolv || log "[流程] 备份失败，继续尝试切换"
-  apply_dns "$BEST_DNS" || { log "[流程] 切换 DNS 失败"; exit 1; }
-
-  # 验证不通过则自动回滚，避免留下不可用的 resolv.conf
-  if ! verify_dns; then
-    log "[流程] 切换后解析异常，自动还原原 DNS 配置"
-    restore_dns
+  load_dns_list
+  rank_file=$(mktemp) || exit 1
+  if ! rank_dns "$rank_file"; then
+    print_ranking "$rank_file"
+    rm -f "$rank_file"
+    log "[流程] 所有节点不可达，本次放弃"
     exit 1
   fi
+  print_ranking "$rank_file"
 
-  # 切换后复测 Netflix
-  sleep 2
-  if check_netflix; then
-    log "[流程] 切换成功，Netflix 已解锁 ✓"
-  else
-    log "[流程] 切换后 Netflix 仍未解锁，请到控制台为本机 IP 勾选解锁服务: $CONSOLE_URL"
-    exit 2
+  # 只备份一次，记录真正的原始配置，供全部失败时回滚
+  backup_resolv || log "[流程] 备份失败，继续尝试"
+
+  tried=0
+  applied=""
+  while read -r avg dns; do
+    [ -n "$dns" ] || continue
+    if [ "$avg" -ge 1000 ]; then
+      log "[切换] $dns 不可达，跳过"
+      continue
+    fi
+    tried=$((tried + 1))
+    log "[切换] 候选 $tried: $dns (${avg}ms) 正在测试解锁..."
+    if ! apply_dns "$dns"; then
+      log "[切换] $dns 写入失败，跳过"
+      continue
+    fi
+    if ! verify_dns_quick; then
+      log "[切换] $dns 解析异常，跳过"
+      continue
+    fi
+    if check_netflix; then
+      applied="$dns"
+      break
+    fi
+    log "[切换] $dns 无法解锁，继续下一个"
+  done < "$rank_file"
+  rm -f "$rank_file"
+
+  if [ -n "$applied" ]; then
+    log "[完成] 已切换到 $applied，Netflix 解锁成功 ✓"
+    exit 0
   fi
+
+  # 所有候选都无法解锁
+  if [ "$RESTORE_ON_ALL_FAIL" = "1" ]; then
+    log "[完成] 所有节点均无法解锁，还原原始 DNS 配置"
+    restore_dns
+  else
+    log "[完成] 所有节点均无法解锁，保留最后测试的节点"
+  fi
+  log "[提示] 请到控制台为本机 IP 勾选解锁服务: $CONSOLE_URL"
+  exit 2
 }
 
 show_status() {
