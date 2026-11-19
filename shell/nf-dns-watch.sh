@@ -417,14 +417,30 @@ install_cron() {
     echo "间隔需在 1-59 分钟之间"; exit 1
   fi
   self=$(readlink -f "$0" 2>/dev/null || echo "$0")
+
+  # 改动前先备份现有 crontab，避免误伤系统自带任务
+  mkdir -p /var/lib/nf-dns-watch 2>/dev/null || true
+  old_count=0
+  if crontab -l > /var/lib/nf-dns-watch/crontab.bak 2>/dev/null; then
+    old_count=$(grep -c . /var/lib/nf-dns-watch/crontab.bak 2>/dev/null || echo 0)
+    echo "已备份原 crontab 到 /var/lib/nf-dns-watch/crontab.bak（$old_count 行）"
+  fi
+
   tmp=$(mktemp) || exit 1
-  # 先清掉旧的同类任务（按脚本路径匹配）
+  # 先清掉旧的同类任务（按脚本路径匹配），其余任务原样保留
   crontab -l 2>/dev/null | grep -vF "$self run" > "$tmp" || true
-  # 字段间用单个空格分隔，行尾不加注释，避免 crond 解析歧义
-  echo "*/$interval * * * * $self run" >> "$tmp"
+  # 用 printf 而非 echo，字段间单个空格，行尾不加注释
+  printf '*/%s * * * * %s run\n' "$interval" "$self" >> "$tmp"
+
+  new_count=$(grep -c . "$tmp" 2>/dev/null || echo 0)
+  if [ "$new_count" -lt "$old_count" ]; then
+    echo "警告: 新 crontab 行数($new_count) 少于原行数($old_count)，原文件已备份"
+    echo "      如确认无误可继续，否则执行: crontab /var/lib/nf-dns-watch/crontab.bak"
+  fi
+
   if ! crontab "$tmp"; then
     rm -f "$tmp"
-    echo "写入 crontab 失败"
+    echo "写入 crontab 失败，原文件仍保留在 /var/lib/nf-dns-watch/crontab.bak"
     exit 1
   fi
   rm -f "$tmp"
@@ -433,15 +449,17 @@ install_cron() {
   rc-update add crond default >/dev/null 2>&1 || true
   rc-service crond start >/dev/null 2>&1 || rc-service crond restart >/dev/null 2>&1 || true
 
-  # 回读校验：字段必须是 5 段，且第一段形如 */N
+  # 回读校验：必须 6 段以上，且第一段严格等于 */N
   line=$(crontab -l 2>/dev/null | grep -F "$self run" | tail -n1)
   fields=$(echo "$line" | awk '{print NF}')
+  first=$(echo "$line" | awk '{print $1}')
   echo ""
   echo "已安装定时任务（每 $interval 分钟）："
   echo "  $line"
-  if [ "${fields:-0}" -lt 6 ]; then
+  if [ "${fields:-0}" -lt 6 ] || [ "$first" != "*/$interval" ]; then
     echo ""
-    echo "警告: 该行字段数异常（$fields），请用 'crontab -l | cat -A' 检查空格"
+    echo "警告: cron 行格式异常（字段数=$fields, 首段=[$first]，期望 [*/$interval]）"
+    echo "      请执行 'crontab -l | cat -A' 检查空格是否丢失"
   fi
   echo ""
   echo "crond 状态: $(rc-service crond status 2>&1 | head -1)"
@@ -449,10 +467,12 @@ install_cron() {
 
 uninstall_cron() {
   self=$(readlink -f "$0" 2>/dev/null || echo "$0")
+  mkdir -p /var/lib/nf-dns-watch 2>/dev/null || true
+  crontab -l > /var/lib/nf-dns-watch/crontab.bak 2>/dev/null || true
   tmp=$(mktemp) || exit 1
-  crontab -l 2>/dev/null | grep -vF "$self run" > "$tmp"
+  crontab -l 2>/dev/null | grep -vF "$self run" > "$tmp" || true
   crontab "$tmp" && rm -f "$tmp"
-  echo "已移除定时任务"
+  echo "已移除定时任务（原文件备份在 /var/lib/nf-dns-watch/crontab.bak）"
 }
 
 usage() {
