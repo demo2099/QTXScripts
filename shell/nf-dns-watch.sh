@@ -25,6 +25,7 @@
 #   nf-dns-watch.sh diag             诊断：区分「节点不可达」与「AKDNS 未下发解锁」
 #   nf-dns-watch.sh test-notify      发送一条测试通知，验证推送配置
 #   nf-dns-watch.sh install-cron 5   安装定时任务（每 5 分钟，参数可改分钟数）
+#   nf-dns-watch.sh fix-cron         修复被吞掉空格的 cron 行（*/5* → */5 *）并重装
 #   nf-dns-watch.sh uninstall-cron   移除定时任务
 #   nf-dns-watch.sh restore          从最近一次备份还原 resolv.conf
 #   nf-dns-watch.sh status           查看当前 DNS 与 Netflix 状态
@@ -643,9 +644,10 @@ install_cron() {
 
   tmp=$(mktemp) || exit 1
   # 先清掉旧的同类任务（按脚本路径匹配），其余任务原样保留
-  crontab -l 2>/dev/null | grep -vF "$self run" > "$tmp" || true
-  # 用 printf 而非 echo，字段间单个空格，行尾不加注释
-  printf '*/%s * * * * %s run\n' "$interval" "$self" >> "$tmp"
+  # 同时修复历史上被吞掉空格的 `*/N*` 行（含 Alpine 自带的 periodic 任务）
+  crontab -l 2>/dev/null | sed 's#^\*/\([0-9][0-9]*\)\*#*/\1 *#' | grep -vF "$self run" > "$tmp" || true
+  # 字段分开写，间隔空格由 echo 生成，不依赖源码里的字面空格（防传输丢空格）
+  echo "*/$interval" "*" "*" "*" "*" "$self run" >> "$tmp"
 
   new_count=$(grep -c . "$tmp" 2>/dev/null || echo 0)
   if [ "$new_count" -lt "$old_count" ]; then
@@ -664,20 +666,30 @@ install_cron() {
   rc-update add crond default >/dev/null 2>&1 || true
   rc-service crond start >/dev/null 2>&1 || rc-service crond restart >/dev/null 2>&1 || true
 
-  # 回读校验：必须 6 段以上，且第一段严格等于 */N
+  # 回读校验：必须是 7 段（5 段时间 + 命令 + 参数），且第一段严格等于 */N
   line=$(crontab -l 2>/dev/null | grep -F "$self run" | tail -n1)
   fields=$(echo "$line" | awk '{print NF}')
   first=$(echo "$line" | awk '{print $1}')
   echo ""
   echo "已安装定时任务（每 $interval 分钟）："
   echo "  $line"
-  if [ "${fields:-0}" -lt 6 ] || [ "$first" != "*/$interval" ]; then
+  if [ "${fields:-0}" -lt 7 ] || [ "$first" != "*/$interval" ]; then
     echo ""
-    echo "警告: cron 行格式异常（字段数=$fields, 首段=[$first]，期望 [*/$interval]）"
-    echo "      请执行 'crontab -l | cat -A' 检查空格是否丢失"
+    echo "警告: cron 行格式异常（字段数=$fields，期望 7；首段=[$first]，期望 [*/$interval]）"
+    echo "      空格被吞了，crond 会静默跳过这条任务。执行 'crontab -l | tr ' ' '_'' 可看清实际内容"
+  else
+    echo "  格式校验: 通过（7 段，首段 */$interval）"
   fi
   echo ""
   echo "crond 状态: $(rc-service crond status 2>&1 | head -1)"
+}
+
+# 修复已有 crontab 里被吞空格的 */N* 行，并按原间隔重装任务
+fix_cron() {
+  self=$(readlink -f "$0" 2>/dev/null || echo "$0")
+  interval=$(crontab -l 2>/dev/null | grep -F "$self run" | sed -n 's#^\*/\([0-9][0-9]*\).*#\1#p' | head -n1)
+  echo "检测到原间隔: ${interval:-未找到，按 5 分钟处理}"
+  install_cron "${interval:-5}"
 }
 
 uninstall_cron() {
@@ -691,7 +703,7 @@ uninstall_cron() {
 }
 
 usage() {
-  sed -n '2,31p' "$0"
+  sed -n '2,32p' "$0"
 }
 
 # 只测速，不修改任何系统配置（用于排障/验证测速逻辑）
@@ -831,6 +843,7 @@ case "${1:-run}" in
   restore)        restore_dns ;;
   status)         show_status ;;
   install-cron)   install_cron "${2:-5}" ;;
+  fix-cron)       fix_cron ;;
   uninstall-cron) uninstall_cron ;;
   -h|--help|help) usage ;;
   *) echo "未知命令: $1"; usage; exit 1 ;;
