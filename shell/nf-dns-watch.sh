@@ -22,6 +22,7 @@
 #   nf-dns-watch.sh run              检测一次（cron 调用入口）
 #   nf-dns-watch.sh force            无论 Netflix 状态都强制测速并换 DNS
 #   nf-dns-watch.sh test-speed       只测速看结果，不改任何系统配置
+#   nf-dns-watch.sh diag             诊断：区分「节点不可达」与「AKDNS 未下发解锁」
 #   nf-dns-watch.sh test-notify      发送一条测试通知，验证推送配置
 #   nf-dns-watch.sh install-cron 5   安装定时任务（每 5 分钟，参数可改分钟数）
 #   nf-dns-watch.sh uninstall-cron   移除定时任务
@@ -142,11 +143,9 @@ send_notify() {
   [ -n "$n_group" ] || n_group="nf-dns-watch"
   [ -n "$n_ttl" ] || n_ttl=600
 
-  n_payload=$(printf '{"title":"%s","body":"%s","group":"%s","ttl":%s}' \
-    "$n_title" "$n_body" "$n_group" "$n_ttl")
+  n_payload=$(printf '{"title":"%s","body":"%s","group":"%s","ttl":%s}' "$n_title" "$n_body" "$n_group" "$n_ttl")
 
-  n_resp=$(curl -s -X POST "$n_base" -H 'Content-Type: application/json; charset=utf-8' \
-    -d "$n_payload" --connect-timeout 8 --max-time 15 2>/dev/null)
+  n_resp=$(curl -s -X POST "$n_base" -H 'Content-Type: application/json; charset=utf-8' -d "$n_payload" --connect-timeout 8 --max-time 15 2>/dev/null)
 
   case "$n_resp" in
     *'"code":200'*|*'"code": 200'*)
@@ -660,7 +659,7 @@ uninstall_cron() {
 }
 
 usage() {
-  sed -n '2,30p' "$0"
+  sed -n '2,31p' "$0"
 }
 
 # 只测速，不修改任何系统配置（用于排障/验证测速逻辑）
@@ -670,6 +669,61 @@ test_speed() {
   echo ""
   echo "最优节点: $BEST_DNS$( [ "$DNS_USE_TCP" = "1" ] && echo " (TCP)" )"
   echo "（仅测速，未修改 /etc/resolv.conf）"
+}
+
+# 诊断：判断「节点不可达」还是「AKDNS 没给本机 IP 下发解锁」
+# 原理：AKDNS 的解锁是靠改写 Netflix 域名的解析结果实现的。
+#       若节点返回的 A 记录与公共 DNS 完全一致，说明没有下发解锁（白名单/IP 问题），
+#       而不是节点列表变了或节点挂了。
+diag() {
+  need_cmd dig bind-tools || exit 1
+
+  echo "=== 出口公网 IPv4 ==="
+  pub=$(curl -4 -s --connect-timeout 5 --max-time 10 https://api.ip.sb/ip 2>/dev/null | tr -d ' \r\n')
+  if [ -z "$pub" ]; then
+    pub=$(curl -4 -s --connect-timeout 5 --max-time 10 https://ipinfo.io/ip 2>/dev/null | tr -d ' \r\n')
+  fi
+  echo "  ${pub:-获取失败（不影响下面的判断）}"
+  echo "  ↑ AKDNS 控制台里要绑定的就是这个 IP"
+  echo ""
+
+  echo "=== 对照解析（公共 DNS 8.8.8.8）==="
+  base=$(dig +short +time=3 +tries=1 @8.8.8.8 www.netflix.com A 2>/dev/null | grep -E '^[0-9]+\.' | sort | tr '\n' ' ')
+  echo "  www.netflix.com -> ${base:-查询失败}"
+  echo ""
+
+  echo "=== 各节点对 www.netflix.com 的解析 ==="
+  load_dns_list
+  hit=0
+  alive=0
+  for dns in $DNS_LIST; do
+    ans=$(dig +short +time=2 +tries=1 "@$dns" www.netflix.com A 2>/dev/null | grep -E '^[0-9]+\.' | sort | tr '\n' ' ')
+    if [ -z "$ans" ]; then
+      printf '  %-16s %s\n' "$dns" "无响应 / 不可达"
+    else
+      alive=$((alive + 1))
+      if [ -n "$base" ] && [ "$ans" = "$base" ]; then
+        printf '  %-16s %-30s %s\n' "$dns" "$ans" "未下发解锁"
+      else
+        hit=$((hit + 1))
+        printf '  %-16s %-30s %s\n' "$dns" "$ans" "解锁已生效"
+      fi
+    fi
+  done
+  echo ""
+
+  echo "=== 判定 ==="
+  if [ "$alive" -eq 0 ]; then
+    echo "  所有节点都不可达：本机到 AKDNS 的网络被拦，或 UDP/53 被墙（脚本会自动回退 TCP）"
+  elif [ "$hit" -eq 0 ]; then
+    echo "  节点都活着，但没有任何节点给本机 IP 下发解锁。"
+    echo "  说明问题在 AKDNS 侧，不是脚本里的节点列表："
+    echo "   1) 本机出口 IP 未加入白名单（或换过 IP / 重装过系统）→ $CONSOLE_URL"
+    echo "   2) 白名单刚加，生效约需 1-2 小时"
+    echo "   3) 账号套餐/解锁服务已变更或到期"
+  else
+    echo "  有 $hit 个节点已下发解锁，脚本会自动切到这些节点上。"
+  fi
 }
 
 # 测试通知通道是否可用
@@ -688,6 +742,7 @@ case "${1:-run}" in
   run)            run_once 0 ;;
   force)          run_once 1 ;;
   test-speed)     test_speed ;;
+  diag)           diag ;;
   test-notify|notify-test) test_notify ;;
   restore)        restore_dns ;;
   status)         show_status ;;
