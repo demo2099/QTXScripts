@@ -437,6 +437,26 @@ verify_dns_quick() {
   fi
 }
 
+# 检查系统解析器是否真的在用刚写入的节点
+# 判定：用系统解析器（不带 @）查 www.netflix.com，应与直连该节点的答案一致
+# 不一致 = /etc/resolv.conf 被其他程序接管或还原（VPN 客户端 / udhcpc / 容器挂载）
+verify_resolver_uses() {
+  dns_ip="$1"
+  direct=$(dig +short +time=3 +tries=1 "@$dns_ip" www.netflix.com A 2>/dev/null | grep -E '^[0-9]+\.' | sort | tr '\n' ' ')
+  system=$(dig +short +time=3 +tries=1 www.netflix.com A 2>/dev/null | grep -E '^[0-9]+\.' | sort | tr '\n' ' ')
+  if [ -z "$system" ]; then
+    log "[验证] 系统解析器无响应（resolv.conf 可能未生效）"
+    return 1
+  fi
+  if [ "$system" = "$direct" ]; then
+    return 0
+  fi
+  log "[验证] 系统解析答案与节点不一致："
+  log "[验证]   系统解析器 -> $system"
+  log "[验证]   节点直连   -> $direct"
+  return 1
+}
+
 # ============================================================
 # 还原（对应 akdns.sh 菜单「还原 DNS 配置」，取最近一次备份）
 # ============================================================
@@ -506,6 +526,7 @@ run_once() {
 
   tried=0
   applied=""
+  hijack=0
   while read -r avg dns; do
     [ -n "$dns" ] || continue
     if [ "$avg" -ge 1000 ]; then
@@ -521,6 +542,10 @@ run_once() {
     if ! verify_dns_quick; then
       log "[切换] $dns 解析异常，跳过"
       continue
+    fi
+    if ! verify_resolver_uses "$dns"; then
+      hijack=1
+      log "[切换] 系统解析器没有采用 $dns，resolv.conf 疑似被其他程序接管"
     fi
     if check_netflix; then
       applied="$dns"
@@ -546,6 +571,13 @@ run_once() {
     restore_dns
   else
     log "[完成] 所有节点均无法解锁，保留最后测试的节点"
+  fi
+  if [ "$hijack" = "1" ]; then
+    log "[提示] 本机 /etc/resolv.conf 被其他程序接管，写入的 DNS 没有生效"
+    log "[提示] 常见来源：Tailscale / Netbird / WireGuard 等 VPN 客户端、udhcpc、容器挂载"
+    log "[提示] 先停掉接管 resolv.conf 的程序，或让其下发 DNS 改为 AKDNS 节点"
+    notify_all_fail "所有节点都无法解锁。原因：本机 /etc/resolv.conf 被 VPN/DHCP 等程序接管，写入的 DNS 未生效"
+    exit 2
   fi
   log "[提示] 请到控制台为本机 IP 勾选解锁服务: $CONSOLE_URL"
   notify_all_fail "已测试全部 $(echo "$DNS_LIST" | wc -w) 个节点，均无法解锁 Netflix"
@@ -685,6 +717,16 @@ diag() {
   fi
   echo "  ${pub:-获取失败（不影响下面的判断）}"
   echo "  ↑ AKDNS 控制台里要绑定的就是这个 IP"
+  echo ""
+
+  echo "=== /etc/resolv.conf 现状 ==="
+  if [ -L /etc/resolv.conf ]; then
+    echo "  符号链接 -> $(readlink -f /etc/resolv.conf 2>/dev/null)"
+    echo "  ↑ 被其他程序接管（VPN/容器），写入后可能被还原"
+  else
+    echo "  普通文件（脚本可直接接管）"
+  fi
+  grep -E '^nameserver|^options' /etc/resolv.conf 2>/dev/null | sed 's/^/  /'
   echo ""
 
   echo "=== 对照解析（公共 DNS 8.8.8.8）==="
