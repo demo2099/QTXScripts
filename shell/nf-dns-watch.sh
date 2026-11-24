@@ -696,6 +696,8 @@ diag() {
   load_dns_list
   hit=0
   alive=0
+  unlock_ip=""
+  unlock_dns=""
   for dns in $DNS_LIST; do
     ans=$(dig +short +time=2 +tries=1 "@$dns" www.netflix.com A 2>/dev/null | grep -E '^[0-9]+\.' | sort | tr '\n' ' ')
     if [ -z "$ans" ]; then
@@ -707,6 +709,10 @@ diag() {
       else
         hit=$((hit + 1))
         printf '  %-16s %-30s %s\n' "$dns" "$ans" "解锁已生效"
+        if [ -z "$unlock_ip" ]; then
+          unlock_ip=$(printf '%s' "$ans" | awk '{print $1}')
+          unlock_dns="$dns"
+        fi
       fi
     fi
   done
@@ -723,6 +729,42 @@ diag() {
     echo "   3) 账号套餐/解锁服务已变更或到期"
   else
     echo "  有 $hit 个节点已下发解锁，脚本会自动切到这些节点上。"
+  fi
+  echo ""
+
+  # 关键一步：能解析到解锁入口，不代表能真正访问 Netflix
+  # 这里用 --resolve 直接把域名钉到解锁入口 IP 上实测，不改动系统 DNS
+  if [ -z "$unlock_ip" ]; then
+    return 0
+  fi
+  echo "=== 解锁入口实测（不修改系统 DNS）==="
+  echo "  入口: $unlock_dns -> $unlock_ip"
+  p1=""
+  p2=""
+  for t in 81280792 70143836; do
+    r=$(curl -4 -sL -A "$NF_UA" -o /dev/null -w '%{http_code}|%{url_effective}' --resolve "www.netflix.com:443:$unlock_ip" --connect-timeout 8 --max-time 25 "https://www.netflix.com/title/$t" 2>/dev/null)
+    code=${r%%|*}
+    final=${r#*|}
+    [ -n "$code" ] || code=000
+    printf '  title %-9s HTTP %-4s %s\n' "$t" "$code" "$final"
+    if [ "$t" = "81280792" ]; then p1=$code; else p2=$code; fi
+  done
+  echo ""
+  echo "=== 实测结论 ==="
+  if [ "$p1" = "200" ] && [ "$p2" = "200" ]; then
+    echo "  两个标题都是 200，解锁正常。若脚本仍报未解锁，请检查脚本里的 NF_UA 是否被改、或本机 IPv6 抢先解析（试试禁用 v6）"
+  elif [ "$p1" = "200" ] && [ "$p2" = "404" ]; then
+    echo "  非自制剧 200 / 自制剧 404 → 仅自制剧，按判定视为未解锁"
+  elif [ "$p1" = "404" ] && [ "$p2" = "200" ]; then
+    echo "  非自制剧 404 / 自制剧 200 → 解锁区域里没有该非自制剧（常见于港区），属正常，"
+    echo "  但按标准判定会被算作「未解锁」，脚本会一直重试。见下方说明。"
+  elif [ "$p1" = "403" ] || [ "$p2" = "403" ]; then
+    echo "  被封锁（403）：入口 IP 在，但区域策略拒绝"
+  elif [ "$p1" = "000" ] || [ "$p2" = "000" ]; then
+    echo "  连不上解锁入口（000）：入口 IP 不可达，或 TLS 握手被重置"
+    echo "  试试: curl -v --resolve www.netflix.com:443:$unlock_ip https://www.netflix.com/ 看卡在哪一步"
+  else
+    echo "  非 200 响应，见上方状态码"
   fi
 }
 
